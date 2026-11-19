@@ -86,8 +86,11 @@ function armDelete(btn, fn, label) {
   setTimeout(() => { btn.classList.remove('armed'); btn.textContent = t; }, 3000);
 }
 function fillSelect(el, opts, placeholder) {
+  const html = (placeholder ? `<option value="">${esc(placeholder)}</option>` : '') + opts.map(o => `<option value="${esc(o.v)}"${o.disabled ? ' disabled' : ''}>${esc(o.t)}</option>`).join('');
+  if (el.dataset.sig === html) return;   // 中身が同じなら作り直さない（入力中・選択中を邪魔しない）
   const v = el.value;
-  el.innerHTML = (placeholder ? `<option value="">${esc(placeholder)}</option>` : '') + opts.map(o => `<option value="${esc(o.v)}"${o.disabled ? ' disabled' : ''}>${esc(o.t)}</option>`).join('');
+  el.dataset.sig = html;
+  el.innerHTML = html;
   if ([...el.options].some(o => o.value === v)) el.value = v;
 }
 function setupTabs(sel, key, onPick) {
@@ -129,20 +132,20 @@ function showAuth(mode, opts) {
   const box = $('#auth'); box.hidden = false; $('#app').hidden = true;
   const titles = { login: 'ログイン', signup: 'はじめての方（アカウント登録）', reset: 'パスワードの再設定', newpass: '新しいパスワードを決める' };
   const f = {
-    login: `<label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" required></label>
-            <label class="f">パスワード<input type="password" id="au-pass" autocomplete="current-password" required></label>
+    login: `<label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></label>
+            <label class="f">パスワード<input type="password" id="au-pass" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
             <button class="btn primary" type="submit">ログイン</button>
             <div class="row" style="justify-content:space-between">${opts.signup ? '<button class="btn link" type="button" data-mode="signup">はじめての方はこちら</button>' : '<span></span>'}<button class="btn link" type="button" data-mode="reset">パスワードを忘れた</button></div>`,
     signup: `<label class="f">お名前（管理者が確認に使います）<input id="au-name" autocomplete="name" required placeholder="例）山田 花子"></label>
-            <label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" required></label>
-            <label class="f">パスワード（8文字以上）<input type="password" id="au-pass" autocomplete="new-password" minlength="8" required></label>
+            <label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></label>
+            <label class="f">パスワード（8文字以上）<input type="password" id="au-pass" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="8" required></label>
             <button class="btn primary" type="submit">登録する</button>
             <button class="btn link" type="button" data-mode="login">アカウントをお持ちの方はログイン</button>`,
     reset: `<p class="muted small" style="margin:0">登録したメールアドレスに、パスワードを決め直すためのリンクを送ります。</p>
-            <label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" required></label>
+            <label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></label>
             <button class="btn primary" type="submit">リンクを送る</button>
             <button class="btn link" type="button" data-mode="login">ログインに戻る</button>`,
-    newpass: `<label class="f">新しいパスワード（8文字以上）<input type="password" id="au-pass" autocomplete="new-password" minlength="8" required></label>
+    newpass: `<label class="f">新しいパスワード（8文字以上）<input type="password" id="au-pass" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="8" required></label>
             <button class="btn primary" type="submit">保存してログイン</button>`,
   };
   box.innerHTML = `<form class="card stack" id="au-form"><div><h2>${titles[mode]}</h2><p class="muted small" style="margin:4px 0 0">${esc(opts.subtitle || '')}</p></div><div id="au-msg"></div>${f[mode]}</form>`;
@@ -151,7 +154,7 @@ function showAuth(mode, opts) {
   $('#au-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
-    const email = $('#au-email') && $('#au-email').value.trim(), pass = $('#au-pass') && $('#au-pass').value;
+    const email = $('#au-email') && $('#au-email').value.trim().toLowerCase(), pass = $('#au-pass') && $('#au-pass').value;
     const back = location.origin + location.pathname;
     try {
       if (mode === 'login') {
