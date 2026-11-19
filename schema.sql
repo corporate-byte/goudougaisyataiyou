@@ -43,7 +43,7 @@ create table public.records (
   break_min        integer not null default 0 check (break_min between 0 and 600),
   edited_by_admin  boolean not null default false,
   created_at       timestamptz not null default now(),
-  check (out_at is null or out_at > in_at)
+  check (out_at is null or out_at >= in_at)
 );
 
 create table public.requests (

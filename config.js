@@ -1,11 +1,10 @@
 // =============================================================
-// ここに Supabase プロジェクトの情報を入れてください。
-// Supabase の管理画面 → Project Settings → API（または「Connect」ボタン）で確認できます。
-//   SUPABASE_URL : Project URL（https://xxxxxxxx.supabase.co）
-//   SUPABASE_KEY : Publishable key（sb_publishable_... ）または anon public key
+// Supabase プロジェクトの接続先。
+//   SUPABASE_URL : Project URL
+//   SUPABASE_KEY : Publishable key（ブラウザに置いても安全なキー）
 // ※ service_role / secret key は絶対に入れないでください。
 // =============================================================
 window.CARETIME_CONFIG = {
-  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
-  SUPABASE_KEY: 'YOUR-PUBLISHABLE-KEY',
+  SUPABASE_URL: 'https://tgvosjgmhqsrtmmfriuk.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_H_E6iOQcsnE64CUUSypvCw_k9rvoZMs',
 };
