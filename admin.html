@@ -14,7 +14,7 @@
 <div class="wrap">
   <header class="top">
     <div class="brand"><div class="brand-mark">ケ</div><h1>ケアタイム勤怠 管理</h1></div>
-    <div class="who" id="who" hidden><span id="who-name"></span><button class="btn sm" type="button" id="refresh">最新にする</button><button class="btn sm" type="button" id="logout">ログアウト</button></div>
+    <div class="who" id="who" hidden><span id="who-name"></span><a class="btn sm primary" href="staff.html" style="text-decoration:none">スタッフ画面へ</a><button class="btn sm" type="button" id="refresh">最新にする</button><button class="btn sm" type="button" id="logout">ログアウト</button></div>
   </header>
 
   <div id="auth" class="auth" hidden></div>
@@ -118,15 +118,32 @@
         <div class="card"><div id="ad-care"></div></div>
       </div>
 
-      <div data-panel="cfg" hidden>
-        <form class="card stack" id="cfg-form" style="max-width:560px">
-          <h3>訪問先</h3>
-          <label class="f">1行に1件（出勤時とケア記録の選択肢になります）<textarea id="cfg-res" rows="6" placeholder="佐藤 様&#10;鈴木 様"></textarea></label>
+      <div data-panel="cfg" hidden class="stack">
+        <div class="card stack">
+          <div><h3>訪問先</h3><p class="muted small" style="margin:4px 0 0">出勤するときとケア記録の選択肢になります。「休止」にすると選択肢から外れます（過去の記録は残ります）。</p></div>
+          <form class="row" id="visit-form">
+            <label class="f" style="flex:2 1 180px">訪問先の名前<input id="vs-name" required placeholder="例）山本 太郎"></label>
+            <label class="f" style="flex:1 1 150px">サービス種別<select id="vs-svc"></select></label>
+            <button class="btn primary" type="submit">追加</button>
+          </form>
+          <div id="visit-list" class="list"></div>
+        </div>
+        <div class="card stack">
+          <div><h3>サービス種別と時給</h3><p class="muted small" style="margin:4px 0 0">時給を空欄にした種別は、スタッフごとの時給で計算します。決まった時給の種別（例：移動支援は一律1,100円）は、ここに金額を入れてください。</p></div>
+          <form class="row" id="svc-form">
+            <label class="f" style="flex:2 1 160px">種別の名前<input id="svc-name" required placeholder="例）身体介護"></label>
+            <label class="f" style="flex:1 1 140px">時給（円・任意）<input type="number" id="svc-rate" min="0" step="1" placeholder="空欄＝スタッフの時給"></label>
+            <button class="btn primary" type="submit">追加</button>
+          </form>
+          <div id="svc-list" class="list"></div>
+        </div>
+        <form class="card stack" id="cfg-form" style="max-width:640px">
           <h3>給与計算のルール</h3>
           <div class="grid2">
             <label class="f">深夜割増（22時〜5時）%<input type="number" id="cfg-night" min="0" step="1"></label>
             <label class="f">残業割増 %<input type="number" id="cfg-ot" min="0" step="1"></label>
             <label class="f">1日の所定（時間）<input type="number" id="cfg-otmin" min="1" step="0.5"></label>
+            <label class="f">同行のときの時給 %（100＝通常どおり）<input type="number" id="cfg-acc" min="0" step="1"></label>
           </div>
           <button class="btn primary" type="submit" style="align-self:flex-start">保存</button>
         </form>
@@ -150,11 +167,37 @@
 <script src="common.js"></script>
 <script>
 'use strict';
-const A = { uid: null, me: null, staff: [], profiles: [], settings: { residents: [], night_rate: 25, ot_rate: 25, ot_hours: 8 },
+const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
   shifts: new Map(), records: new Map(), requests: [], notes: [], weekStart: null, loadedMonths: new Set(), payRows: [] };
 const staffById = id => A.staff.find(s => s.id === id);
 const staffName = id => (staffById(id) || {}).name || '（不明）';
 const toIso = ms => (ms == null ? null : new Date(ms).toISOString());
+const visitNames = () => A.visits.map(v => v.name);
+const serviceOfVisit = name => { const v = A.visits.find(x => x.name === name); const s = v && A.services.find(x => x.id === v.service_type_id); return s ? s.name : ''; };
+const dupMsg = e => /duplicate key|already exists/i.test((e && e.message) || '');
+/* 1件ごとの時給：サービス種別に時給があればそれ、なければスタッフの時給。同行なら設定の%を掛ける */
+function rateOf(r, s) {
+  const svc = A.services.find(t => t.name === r.service);
+  let rate = svc && svc.hourly_rate != null ? Number(svc.hourly_rate) : (Number(s.wage) || 0);
+  if (r.accompany) rate = rate * (Number(A.settings.accompany_pct ?? 100) / 100);
+  return rate;
+}
+/* 1人分の給与（残業は1日の実働合計で判定し、その日の平均時給で割増） */
+function payFor(s, recs) {
+  const c = A.settings, limit = Math.round((Number(c.ot_hours) || 8) * 60), day = {};
+  let work = 0, night = 0, base = 0, nightP = 0, open = 0;
+  recs.forEach(r => {
+    const x = calc(r, c); if (!x) { open++; return; }
+    const rate = rateOf(r, s), b = x.work / 60 * rate;
+    work += x.work; night += x.night; base += b; nightP += x.night / 60 * rate * (c.night_rate / 100);
+    const d = day[r.date] || (day[r.date] = { work: 0, amt: 0 }); d.work += x.work; d.amt += b;
+  });
+  let ot = 0, otP = 0;
+  Object.values(day).forEach(d => { const o = Math.max(0, d.work - limit); if (o && d.work) { ot += o; otP += o * (d.amt / d.work) * (c.ot_rate / 100); } });
+  const days = Object.keys(day).length, trans = days * (Number(s.transport) || 0);
+  base = Math.round(base); nightP = Math.round(nightP); otP = Math.round(otP);
+  return { s, days, work, night, ot, base, nightP, otP, trans, total: base + nightP + otP + trans, open, visits: recs.length - open };
+}
 
 /* PostgREST は1回1000行までなので、範囲指定で全部取る */
 async function fetchAll(build) {
@@ -169,17 +212,19 @@ async function fetchAll(build) {
 
 /* ---------- 読み込み ---------- */
 async function loadBase() {
-  const [st, pf, cfg, rq] = await Promise.all([
+  const [st, pf, cfg, rq, sv, vs] = await Promise.all([
     sb.from('staff').select('*').order('created_at'),
     sb.from('profiles').select('*').order('created_at'),
     sb.from('settings').select('*').eq('id', 1).maybeSingle(),
     sb.from('requests').select('*').order('created_at', { ascending: false }).limit(300),
+    sb.from('service_types').select('*').order('created_at'),
+    sb.from('visits').select('*').order('created_at'),
   ]);
-  [st, pf, cfg, rq].forEach(r => { if (r.error) toast(errText(r.error), 'bad'); });
+  [st, pf, cfg, rq, sv, vs].forEach(r => { if (r.error) toast(errText(r.error), 'bad'); });
   A.staff = st.data || []; A.profiles = pf.data || []; A.requests = rq.data || [];
+  A.services = sv.data || []; A.visits = vs.data || [];
   if (cfg.data) A.settings = cfg.data;
-  $('#cfg-res').value = (A.settings.residents || []).join('\n');
-  $('#cfg-night').value = A.settings.night_rate; $('#cfg-ot').value = A.settings.ot_rate; $('#cfg-otmin').value = A.settings.ot_hours;
+  $('#cfg-night').value = A.settings.night_rate; $('#cfg-ot').value = A.settings.ot_rate; $('#cfg-otmin').value = A.settings.ot_hours; $('#cfg-acc').value = A.settings.accompany_pct ?? 100;
 }
 async function loadRecordsRange(from, to) {
   try {
@@ -228,7 +273,7 @@ async function reloadAll() {
 /* ---------- 描画 ---------- */
 function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
 function render() {
-  $('#res-dl').innerHTML = (A.settings.residents || []).map(r => `<option value="${esc(r)}">`).join('');
+  $('#res-dl').innerHTML = visitNames().map(r => `<option value="${esc(r)}">`).join('');
   fillSelect($('#sh-staff'), A.staff.filter(s => s.active).map(s => ({ v: s.id, t: s.name })), 'スタッフを選ぶ');
   fillSelect($('#ad-att-staff'), A.staff.map(s => ({ v: s.id, t: s.name })), 'すべて');
   const recs = [...A.records.values()], shifts = [...A.shifts.values()], t = today(), now = Date.now();
@@ -257,7 +302,7 @@ function render() {
   const m = $('#ad-att-month').value, fs = $('#ad-att-staff').value;
   const ar = recs.filter(r => r.date.startsWith(m) && (!fs || r.staffId === fs)).sort((a, b) => a.inAt - b.inAt);
   const memoCell = r => { const m = [r.inMemo && '出勤：' + r.inMemo, r.outMemo && '退勤：' + r.outMemo].filter(Boolean).join(' / '); return m ? `<span title="${esc(m)}" style="display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom">${esc(m)}</span>` : '<span class="muted">—</span>'; };
-  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td>${visitLabel(r)}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td>${memoCell(r)}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="10" class="empty">この月の勤務記録はありません</td></tr>';
+  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td>${visitLabel(r)}${r.service ? ` <span class="tag">${esc(r.service)}</span>` : ''}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td>${memoCell(r)}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="10" class="empty">この月の勤務記録はありません</td></tr>';
 
   /* 修正依頼 */
   const reqRow = (q, actions) => {
@@ -266,28 +311,34 @@ function render() {
       <div class="num">${fmtDate(q.work_date)} ${q.visit ? esc(q.visit) + (q.accompany ? '（同行）' : '') + ' ' : ''}${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}（休憩${q.break_min}分）</div>
       ${rec ? `<div class="muted small num">現在の記録：${hm(rec.inAt)} 〜 ${rec.outAt ? hm(rec.outAt) : '—'}（休憩${rec.breakMin}分）</div>` : ''}
       <div class="small">理由：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small muted">コメント：${esc(q.admin_comment)}</div>` : ''}</div>
-      ${actions ? `<div class="row"><button class="btn sm primary" type="button" data-req-ok="${q.id}">承認して反映</button><button class="btn sm" type="button" data-req-ng="${q.id}">却下</button></div>` : reqPill(q.status)}</div>`;
+      ${actions ? `<div class="row"><button class="btn sm primary" type="button" data-req-ok="${q.id}">承認して反映</button><button class="btn sm" type="button" data-req-ng="${q.id}">却下</button></div>` : `<div class="row" style="align-items:center">${reqPill(q.status)}<button class="btn sm danger" type="button" data-req-del="${q.id}">削除</button></div>`}</div>`;
   };
   $('#ad-req-open').innerHTML = pending.length ? pending.slice().reverse().map(q => reqRow(q, true)).join('') : '<div class="empty">未対応の依頼はありません</div>';
   const done = A.requests.filter(q => q.status !== 'pending').sort((a, b) => String(b.decided_at).localeCompare(String(a.decided_at))).slice(0, 40);
   $('#ad-req-done').innerHTML = done.length ? done.map(q => reqRow(q, false)).join('') : '<div class="empty">まだありません</div>';
 
-  renderPay(recs); renderShifts(shifts); renderStaff(); renderCare();
+  renderPay(recs); renderShifts(shifts); renderStaff(); renderCare(); renderSettings();
+}
+function renderSettings() {
+  const svcOpts = A.services.map(s => ({ v: s.id, t: s.name }));
+  fillSelect($('#vs-svc'), svcOpts, '（種別なし）');
+  const optHtml = id => `<option value="">（種別なし）</option>` + A.services.map(s => `<option value="${esc(s.id)}"${s.id === id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  $('#visit-list').innerHTML = A.visits.length ? A.visits.map(v => `<div class="li" style="flex-wrap:wrap"><div style="flex:1 1 180px"><strong>${esc(v.name)}</strong>${v.active ? '' : ' <span class="pill mute">休止中</span>'}</div>
+    <div class="row" style="align-items:center"><select data-visit-svc="${v.id}" style="width:150px">${optHtml(v.service_type_id)}</select>
+    <button class="btn sm" type="button" data-visit-rename="${v.id}">名前変更</button>
+    <button class="btn sm" type="button" data-visit-toggle="${v.id}">${v.active ? '休止' : '再開'}</button>
+    <button class="btn sm danger" type="button" data-visit-del="${v.id}">削除</button></div></div>`).join('') : '<div class="empty">まだ訪問先がありません。上のフォームから追加してください</div>';
+  $('#svc-list').innerHTML = A.services.length ? A.services.map(s => `<div class="li"><div style="flex:1"><strong>${esc(s.name)}</strong> <span class="muted small">${s.hourly_rate != null ? yen(s.hourly_rate) + '／時' : 'スタッフの時給で計算'}・訪問先${A.visits.filter(v => v.service_type_id === s.id).length}件</span></div>
+    <div class="row"><button class="btn sm" type="button" data-svc-edit="${s.id}">編集</button><button class="btn sm danger" type="button" data-svc-del="${s.id}">削除</button></div></div>`).join('') : '<div class="empty">まだサービス種別がありません。全員スタッフごとの時給で計算されます</div>';
 }
 function renderPay(recs) {
   const m = $('#ad-pay-month').value, c = A.settings;
-  A.payRows = A.staff.map(s => {
-    const { work, night, ot, open, days } = summarize(recs.filter(r => r.staffId === s.id && r.date.startsWith(m)), c);
-    const w = Number(s.wage) || 0;
-    const base = Math.round(work / 60 * w), nightP = Math.round(night / 60 * w * (c.night_rate / 100)), otP = Math.round(ot / 60 * w * (c.ot_rate / 100));
-    const trans = days * (Number(s.transport) || 0);
-    return { s, days, work, night, ot, base, nightP, otP, trans, total: base + nightP + otP + trans, open };
-  }).filter(p => p.days || p.open || p.s.active);
+  A.payRows = A.staff.map(s => payFor(s, recs.filter(r => r.staffId === s.id && r.date.startsWith(m)))).filter(p => p.days || p.open || p.s.active);
   const P = A.payRows, sum = k => P.reduce((a, p) => a + p[k], 0);
   $('#ad-pay').innerHTML = P.length ? P.map(p => `<tr><td><strong>${esc(p.s.name)}</strong>${p.open ? ` <span class="pill warn">退勤なし${p.open}件</span>` : ''}</td><td class="r">${yen(p.s.wage)}</td><td class="r">${p.days}</td><td class="r">${hhmm(p.work)}</td><td class="r">${hhmm(p.night)}</td><td class="r">${hhmm(p.ot)}</td><td class="r">${yen(p.base)}</td><td class="r">${yen(p.nightP)}</td><td class="r">${yen(p.otP)}</td><td class="r">${yen(p.trans)}</td><td class="r"><strong>${yen(p.total)}</strong></td></tr>`).join('') : '<tr><td colspan="11" class="empty">スタッフを登録すると、ここに給与が計算されます</td></tr>';
   $('#ad-pay-foot').innerHTML = P.length ? `<tr><td>合計</td><td></td><td class="r">${sum('days')}</td><td class="r">${hhmm(sum('work'))}</td><td class="r">${hhmm(sum('night'))}</td><td class="r">${hhmm(sum('ot'))}</td><td class="r">${yen(sum('base'))}</td><td class="r">${yen(sum('nightP'))}</td><td class="r">${yen(sum('otP'))}</td><td class="r">${yen(sum('trans'))}</td><td class="r">${yen(sum('total'))}</td></tr>` : '';
   $('#ad-pay-kpi').innerHTML = `<div class="kpi"><b class="num">${yen(sum('total'))}</b><span>${m.replace('-', '年')}月の支給額合計</span></div><div class="kpi"><b class="num">${hhmm(sum('work'))}</b><span>総実働時間</span></div><div class="kpi"><b class="num">${P.filter(p => p.days).length}人</b><span>出勤したスタッフ</span></div>`;
-  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。深夜（22時〜5時）は${c.night_rate}%、1日の実働合計（訪問をまたいで合算）が${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
+  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。時給は、訪問先のサービス種別に時給があればその額、なければスタッフの時給（表の「時給」列）。同行は時給の${c.accompany_pct ?? 100}%。深夜（22時〜5時）は${c.night_rate}%、1日の実働合計（訪問をまたいで合算）が${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
 }
 function renderShifts(shifts) {
   const days = [...Array(7)].map((_, i) => addDays(A.weekStart, i));
@@ -300,14 +351,14 @@ function renderShifts(shifts) {
 function renderStaff() {
   $('#ad-staff').innerHTML = A.staff.length ? A.staff.map(s => {
     const acc = A.profiles.filter(p => p.staff_id === s.id);
-    return `<tr><td><strong>${esc(s.name)}</strong>${s.active ? '' : ' <span class="pill mute">退職</span>'}</td><td class="r">${yen(s.wage)}</td><td class="r">${yen(s.transport)}</td><td>${acc.map(p => `<span class="pill good">${esc(p.email || p.display_name)}</span>`).join(' ') || '<span class="pill mute">未登録</span>'}</td><td><button class="btn sm" type="button" data-staff-edit="${s.id}">編集</button></td></tr>`;
+    return `<tr><td><strong>${esc(s.name)}</strong>${s.active ? '' : ' <span class="pill mute">退職</span>'}</td><td class="r">${yen(s.wage)}</td><td class="r">${yen(s.transport)}</td><td>${acc.map(p => `<span class="pill good">${esc(p.email || p.display_name)}</span>`).join(' ') || '<span class="pill mute">未登録</span>'}</td><td><button class="btn sm" type="button" data-staff-edit="${s.id}">編集</button> <button class="btn sm danger" type="button" data-staff-del="${s.id}">削除</button></td></tr>`;
   }).join('') : '<tr><td colspan="5" class="empty">まだスタッフがいません。上のフォームから追加してください</td></tr>';
   const opts = A.staff.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
   const sorted = A.profiles.slice().sort((a, b) => (a.staff_id ? 1 : 0) - (b.staff_id ? 1 : 0));
   $('#ad-accounts').innerHTML = sorted.length ? sorted.map(p => `<div class="li" style="flex-wrap:wrap"><div style="flex:1 1 220px"><strong>${esc(p.display_name || '（名前なし）')}</strong>${p.id === A.uid ? ' <span class="tag">あなた</span>' : ''}${p.staff_id ? '' : ' <span class="pill warn">紐付け待ち</span>'}<div class="muted small">${esc(p.email || '')}</div></div>
     <div class="row" style="align-items:center"><select data-acc-staff="${p.id}" style="width:160px"><option value="">（スタッフ未選択）</option>${opts}</select>
     <select data-acc-role="${p.id}" style="width:110px"><option value="staff">スタッフ</option><option value="admin">管理者</option></select>
-    <button class="btn sm primary" type="button" data-acc-save="${p.id}">保存</button></div></div>`).join('') : '<div class="empty">まだアカウントがありません</div>';
+    <button class="btn sm primary" type="button" data-acc-save="${p.id}">保存</button>${p.id === A.uid ? '' : `<button class="btn sm danger" type="button" data-acc-del="${p.id}">削除</button>`}</div></div>`).join('') : '<div class="empty">まだアカウントがありません</div>';
   sorted.forEach(p => { $(`[data-acc-staff="${p.id}"]`).value = p.staff_id || ''; $(`[data-acc-role="${p.id}"]`).value = p.role; });
 }
 function renderCare() {
@@ -317,9 +368,9 @@ function renderCare() {
 /* ---------- 操作 ---------- */
 function recordModal(r) {
   const staffSel = r ? '' : `<label class="f">スタッフ<select name="staff" required><option value="">選んでください</option>${A.staff.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label>`;
-  openModal(r ? `${staffName(r.staffId)} さんの勤務を編集` : '勤務記録を追加', staffSel + timeForm(r ? { date: r.date, inTime: hm(r.inAt), outTime: r.outAt ? hm(r.outAt) : '', breakMin: r.breakMin, visit: r.visit, accompany: r.accompany } : {}, A.settings.residents), '保存', async f => {
+  openModal(r ? `${staffName(r.staffId)} さんの勤務を編集` : '勤務記録を追加', staffSel + timeForm(r ? { date: r.date, inTime: hm(r.inAt), outTime: r.outAt ? hm(r.outAt) : '', breakMin: r.breakMin, visit: r.visit, accompany: r.accompany } : {}, visitNames()), '保存', async f => {
     const [a, z] = spanFrom(f.date, f.inTime, f.outTime);
-    const body = { work_date: f.date, in_at: toIso(a), out_at: toIso(z), break_min: parseInt(f.breakMin, 10) || 0, edited_by_admin: true, visit: f.visit || '', accompany: f.accompany === '1' };
+    const body = { work_date: f.date, in_at: toIso(a), out_at: toIso(z), break_min: parseInt(f.breakMin, 10) || 0, edited_by_admin: true, visit: f.visit || '', service: serviceOfVisit(f.visit), accompany: f.accompany === '1' };
     const res = r ? await run(sb.from('records').update(body).eq('id', r.id), '勤務記録を更新しました')
                   : await run(sb.from('records').insert({ ...body, staff_id: f.staff }), '勤務記録を追加しました');
     if (res.ok) { await loadMonth(f.date.slice(0, 7), true); if (r) await loadMonth(r.date.slice(0, 7), true); await loadOpenRecords(); render(); }
@@ -356,8 +407,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('#cfg-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const residents = $('#cfg-res').value.split('\n').map(s => s.trim()).filter(Boolean);
-    const r = await run(sb.from('settings').update({ residents, night_rate: Number($('#cfg-night').value) || 0, ot_rate: Number($('#cfg-ot').value) || 0, ot_hours: Number($('#cfg-otmin').value) || 8 }).eq('id', 1), '設定を保存しました');
+    const r = await run(sb.from('settings').update({ accompany_pct: Number($('#cfg-acc').value) || 0, night_rate: Number($('#cfg-night').value) || 0, ot_rate: Number($('#cfg-ot').value) || 0, ot_hours: Number($('#cfg-otmin').value) || 8 }).eq('id', 1), '設定を保存しました');
+    if (r.ok) { await loadBase(); render(); }
+  });
+  $('#visit-form').addEventListener('submit', async e => {
+    e.preventDefault(); const name = $('#vs-name').value.trim(); if (!name) return;
+    const { error } = await sb.from('visits').insert({ name, service_type_id: $('#vs-svc').value || null });
+    if (error) { toast(dupMsg(error) ? 'その名前の訪問先はすでにあります' : errText(error), 'bad'); return; }
+    toast(`${name} を追加しました`); $('#vs-name').value = ''; await loadBase(); render();
+  });
+  $('#svc-form').addEventListener('submit', async e => {
+    e.preventDefault(); const name = $('#svc-name').value.trim(); if (!name) return;
+    const rv = $('#svc-rate').value.trim();
+    const { error } = await sb.from('service_types').insert({ name, hourly_rate: rv === '' ? null : Number(rv) });
+    if (error) { toast(dupMsg(error) ? 'その名前の種別はすでにあります' : errText(error), 'bad'); return; }
+    toast(`${name} を追加しました`); $('#svc-name').value = ''; $('#svc-rate').value = ''; await loadBase(); render();
+  });
+  document.addEventListener('change', async e => {
+    const id = e.target.dataset && e.target.dataset.visitSvc; if (!id) return;
+    const r = await run(sb.from('visits').update({ service_type_id: e.target.value || null }).eq('id', id), 'サービス種別を変更しました（これからの打刻に反映されます）');
     if (r.ok) { await loadBase(); render(); }
   });
   $('#pay-copy').addEventListener('click', async () => {
@@ -397,6 +465,51 @@ document.addEventListener('DOMContentLoaded', () => {
         if (r.ok) { await loadBase(); render(); }
         return r.ok;
       });
+    }
+    else if (ds.staffDel) {
+      const s = staffById(ds.staffDel); if (!s) return;
+      armDelete(el, async () => {
+        const { error } = await sb.from('staff').delete().eq('id', s.id);
+        if (error) { toast(/foreign key|violates/i.test(error.message) ? `${s.name} さんには勤務記録があるため削除できません。給与の記録を残すため「編集」から「退職」にしてください` : errText(error), 'bad'); return; }
+        toast(`${s.name} さんを削除しました`); await loadBase(); render();
+      });
+    }
+    else if (ds.accDel) {
+      const p = A.profiles.find(x => x.id === ds.accDel); if (!p) return;
+      armDelete(el, async () => {
+        const r = await run(sb.rpc('admin_delete_account', { p_id: p.id }), `${p.display_name || p.email} のアカウントを削除しました`);
+        if (r.ok) { await loadBase(); render(); }
+      }, 'アカウントを削除');
+    }
+    else if (ds.reqDel) armDelete(el, async () => { const r = await run(sb.from('requests').delete().eq('id', ds.reqDel), '依頼を削除しました'); if (r.ok) { await loadBase(); render(); } });
+    else if (ds.visitDel) {
+      const v = A.visits.find(x => x.id === ds.visitDel); if (!v) return;
+      armDelete(el, async () => { const r = await run(sb.from('visits').delete().eq('id', v.id), `${v.name} を削除しました（過去の記録は残ります）`); if (r.ok) { await loadBase(); render(); } });
+    }
+    else if (ds.visitToggle) {
+      const v = A.visits.find(x => x.id === ds.visitToggle); if (!v) return;
+      const r = await run(sb.from('visits').update({ active: !v.active }).eq('id', v.id), v.active ? `${v.name} を休止しました` : `${v.name} を再開しました`);
+      if (r.ok) { await loadBase(); render(); }
+    }
+    else if (ds.visitRename) {
+      const v = A.visits.find(x => x.id === ds.visitRename); if (!v) return;
+      openModal('訪問先の名前を変更', `<label class="f">名前<input name="name" required value="${esc(v.name)}"></label><p class="muted small" style="margin:0">これまでの勤務記録やケア記録に書かれた名前は変わりません。</p>`, '保存', async f => {
+        const { error } = await sb.from('visits').update({ name: f.name.trim() }).eq('id', v.id);
+        if (error) { toast(dupMsg(error) ? 'その名前の訪問先はすでにあります' : errText(error), 'bad'); return false; }
+        toast('名前を変更しました'); await loadBase(); render(); return true;
+      });
+    }
+    else if (ds.svcEdit) {
+      const s = A.services.find(x => x.id === ds.svcEdit); if (!s) return;
+      openModal('サービス種別を編集', `<label class="f">名前<input name="name" required value="${esc(s.name)}"></label><label class="f">時給（円・空欄＝スタッフの時給）<input type="number" name="rate" min="0" value="${s.hourly_rate ?? ''}"></label><p class="muted small" style="margin:0">名前を変えると、これまでの記録の種別名とつながらなくなり、その記録はスタッフの時給で計算されます。時給だけの変更なら問題ありません。</p>`, '保存', async f => {
+        const { error } = await sb.from('service_types').update({ name: f.name.trim(), hourly_rate: f.rate === '' ? null : Number(f.rate) }).eq('id', s.id);
+        if (error) { toast(dupMsg(error) ? 'その名前の種別はすでにあります' : errText(error), 'bad'); return false; }
+        toast('保存しました'); await loadBase(); render(); return true;
+      });
+    }
+    else if (ds.svcDel) {
+      const s = A.services.find(x => x.id === ds.svcDel); if (!s) return;
+      armDelete(el, async () => { const r = await run(sb.from('service_types').delete().eq('id', s.id), `${s.name} を削除しました`); if (r.ok) { await loadBase(); render(); } });
     }
     else if (ds.accSave) {
       const id = ds.accSave, staff_id = $(`[data-acc-staff="${id}"]`).value || null, role = $(`[data-acc-role="${id}"]`).value;

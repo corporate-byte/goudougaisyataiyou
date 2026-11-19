@@ -352,3 +352,38 @@ end $$;
 
 revoke execute on function public.clock_in(text, boolean, text), public.clock_out(integer, text) from public, anon;
 grant execute on function public.clock_in(text, boolean, text), public.clock_out(integer, text) to authenticated;
+
+-- =============================================================
+-- 追加：サービス種別・訪問先をアプリで管理、削除まわり
+-- =============================================================
+create table public.service_types (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  hourly_rate integer check (hourly_rate is null or hourly_rate >= 0),
+  created_at timestamptz not null default now()
+);
+create table public.visits (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  service_type_id uuid references public.service_types(id) on delete set null,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index on public.visits (service_type_id);
+alter table public.records add column service text not null default '';
+alter table public.settings add column accompany_pct numeric not null default 100 check (accompany_pct >= 0);
+alter table public.records drop constraint records_staff_id_fkey;
+alter table public.records add constraint records_staff_id_fkey foreign key (staff_id) references public.staff(id) on delete restrict;
+
+revoke all on public.service_types, public.visits from anon;
+grant select, insert, update, delete on public.service_types, public.visits to authenticated;
+alter table public.service_types enable row level security;
+alter table public.visits enable row level security;
+create policy service_types_admin_select on public.service_types for select to authenticated using ((select public.is_admin()));
+create policy service_types_admin_insert on public.service_types for insert to authenticated with check ((select public.is_admin()));
+create policy service_types_admin_update on public.service_types for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy service_types_admin_delete on public.service_types for delete to authenticated using ((select public.is_admin()));
+create policy visits_select on public.visits for select to authenticated using ((select public.is_admin()) or (select public.my_staff_id()) is not null);
+create policy visits_admin_insert on public.visits for insert to authenticated with check ((select public.is_admin()));
+create policy visits_admin_update on public.visits for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy visits_admin_delete on public.visits for delete to authenticated using ((select public.is_admin()));

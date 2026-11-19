@@ -27,7 +27,7 @@ const ls = { get(k) { try { return localStorage.getItem(k); } catch { return nul
 
 /* DB の行 → 画面で使う形 */
 const normRecord = r => ({ id: r.id, staffId: r.staff_id, userId: r.user_id, date: r.work_date, inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null, breakMin: r.break_min || 0, edited: r.edited_by_admin,
-  visit: r.visit || '', accompany: !!r.accompany, inMemo: r.in_memo || '', outMemo: r.out_memo || '' });
+  visit: r.visit || '', service: r.service || '', accompany: !!r.accompany, inMemo: r.in_memo || '', outMemo: r.out_memo || '' });
 const visitLabel = r => (r.visit ? esc(r.visit) : '<span class="muted">訪問先なし</span>') + (r.accompany ? ' <span class="pill info">同行</span>' : '');
 const normShift = s => ({ id: s.id, staffId: s.staff_id, date: s.work_date, start: t5(s.start_time), end: t5(s.end_time), memo: s.memo || '' });
 

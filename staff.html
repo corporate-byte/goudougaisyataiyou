@@ -14,7 +14,7 @@
 <div class="wrap narrow">
   <header class="top">
     <div class="brand"><div class="brand-mark">ケ</div><h1>ケアタイム勤怠</h1></div>
-    <div class="who" id="who" hidden><span id="who-name"></span><button class="btn sm" type="button" id="logout">ログアウト</button></div>
+    <div class="who" id="who" hidden><span id="who-name"></span><a class="btn sm primary" id="to-admin" href="admin.html" style="text-decoration:none" hidden>管理画面へ</a><button class="btn sm" type="button" id="logout">ログアウト</button></div>
   </header>
 
   <div id="auth" class="auth" hidden></div>
@@ -24,6 +24,7 @@
       <h2>管理者の確認待ちです</h2>
       <p style="margin:0">アカウント登録ができました。管理者があなたのアカウントをスタッフ名と紐付けると、出勤・退勤ができるようになります。</p>
       <p class="muted small" style="margin:0">登録名：<strong id="pending-name"></strong>　メール：<span id="pending-email"></span></p>
+      <p id="pending-admin" class="banner info" style="margin:0" hidden>あなたは管理者です。自分もスタッフとして打刻する場合は、<a href="admin.html">管理画面</a>の「スタッフ」タブ →「登録されたアカウント」で、自分のアカウントにスタッフ名を選んで保存してください。</p>
       <button class="btn" type="button" id="pending-reload" style="align-self:flex-start">もう一度確認する</button>
     </div>
 
@@ -103,7 +104,7 @@
 <script src="common.js"></script>
 <script>
 'use strict';
-const S = { uid: null, profile: null, staffName: '', names: {}, settings: { residents: [], ot_hours: 8 }, shifts: [], records: [], requests: [], notes: [] };
+const S = { uid: null, profile: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
 
 async function loadProfile() {
   const { data, error } = await sb.from('profiles').select('*').eq('id', S.uid).maybeSingle();
@@ -116,10 +117,13 @@ async function start(session) {
   S.profile = await loadProfile();
   if (!S.profile) { toast('プロフィールが見つかりません。管理者に連絡してください', 'bad'); return; }
   $('#who-name').textContent = S.profile.display_name || session.user.email;
+  const isAdmin = S.profile.role === 'admin';
+  $('#to-admin').hidden = !isAdmin;
   if (!S.profile.staff_id) {
     $('#pending').hidden = false; $('#main').hidden = true;
     $('#pending-name').textContent = S.profile.display_name || '（未入力）';
     $('#pending-email').textContent = S.profile.email || '';
+    $('#pending-admin').hidden = !isAdmin;
     return;
   }
   $('#pending').hidden = true; $('#main').hidden = false;
@@ -127,15 +131,17 @@ async function start(session) {
 }
 async function loadAll() {
   const sid = S.profile.staff_id, from = addDays(today(), -100);
-  const [dir, st, sh, rec, req, nt] = await Promise.all([
+  const [dir, st, sh, rec, req, nt, vs] = await Promise.all([
     sb.rpc('staff_directory'),
     sb.from('settings').select('*').eq('id', 1).maybeSingle(),
     sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', addDays(today(), -1)).order('work_date').order('start_time').limit(200),
     sb.from('records').select('*').eq('staff_id', sid).gte('work_date', from).order('in_at', { ascending: false }).limit(500),
     sb.from('requests').select('*').eq('user_id', S.uid).order('created_at', { ascending: false }).limit(100),
     sb.from('notes').select('*').gte('created_at', new Date(Date.now() - 3 * 864e5).toISOString()).order('created_at', { ascending: false }).limit(300),
+    sb.from('visits').select('name').eq('active', true).order('created_at'),
   ]);
-  const firstErr = [dir, st, sh, rec, req, nt].find(r => r.error);
+  const firstErr = [dir, st, sh, rec, req, nt, vs].find(r => r.error);
+  S.visits = (vs.data || []).map(v => v.name);
   if (firstErr) toast(errText(firstErr.error), 'bad');
   S.names = Object.fromEntries((dir.data || []).map(x => [x.id, x.name]));
   if (st.data) S.settings = st.data;
@@ -153,7 +159,7 @@ function renderPunch() {
   $('#st-date').textContent = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）`;
   $('#st-clock').textContent = hm(now);
   const open = openRecord(), btn = $('#st-punch');
-  fillSelect($('#st-visit'), (S.settings.residents || []).map(v => ({ v, t: v })), '訪問先を選んでください');
+  fillSelect($('#st-visit'), S.visits.map(v => ({ v, t: v })), '訪問先を選んでください');
   if (open) {
     const el = (now - open.inAt) / 6e4;
     $('#st-status').innerHTML = `<span class="status on">勤務中 ${hm(open.inAt)}〜（${hhmm(el)}経過）</span><div style="margin-top:8px;font-weight:700">${visitLabel(open)}</div>`;
@@ -171,7 +177,7 @@ function renderPunch() {
 }
 function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
 function render() {
-  $('#res-dl').innerHTML = (S.settings.residents || []).map(r => `<option value="${esc(r)}">`).join('');
+  $('#res-dl').innerHTML = S.visits.map(r => `<option value="${esc(r)}">`).join('');
   renderPunch();
   const t = today(), now = Date.now();
   const up = S.shifts.filter(s => s.date >= t || shiftSpan(s)[1] > now);
@@ -199,7 +205,7 @@ function renderCare() {
 /* ---------- 操作 ---------- */
 function requestForm(rec) {
   const v = rec ? { date: rec.date, inTime: hm(rec.inAt), outTime: rec.outAt ? hm(rec.outAt) : '', breakMin: rec.breakMin, visit: rec.visit, accompany: rec.accompany } : {};
-  openModal(rec ? '勤務時間の修正依頼' : '打刻漏れの申請', timeForm(v, S.settings.residents) + `<label class="f">理由<textarea name="reason" required placeholder="例）退勤ボタンを押し忘れました"></textarea></label>`, '依頼を送る', async f => {
+  openModal(rec ? '勤務時間の修正依頼' : '打刻漏れの申請', timeForm(v, S.visits) + `<label class="f">理由<textarea name="reason" required placeholder="例）退勤ボタンを押し忘れました"></textarea></label>`, '依頼を送る', async f => {
     if (!f.outTime) { toast('退勤時刻を入れてください', 'bad'); return false; }
     const r = await run(sb.from('requests').insert({ staff_id: S.profile.staff_id, user_id: S.uid, record_id: rec ? rec.id : null, work_date: f.date, in_time: f.inTime, out_time: f.outTime, break_min: parseInt(f.breakMin, 10) || 0, reason: f.reason.trim(), visit: f.visit || '', accompany: f.accompany === '1' }), '修正依頼を送りました');
     if (r.ok) loadAll();
