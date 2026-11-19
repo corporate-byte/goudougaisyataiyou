@@ -265,3 +265,90 @@ create policy settings_select on public.settings for select to authenticated
   using ((select public.is_admin()) or (select public.my_staff_id()) is not null);
 create policy settings_admin_update on public.settings for update to authenticated
   using ((select public.is_admin())) with check ((select public.is_admin()));
+
+-- =============================================================
+-- 追加：訪問ごとの打刻（訪問先・同行・情報共有事項）
+-- =============================================================
+alter table public.records
+  add column visit text not null default '',
+  add column accompany boolean not null default false,
+  add column in_memo text not null default '',
+  add column out_memo text not null default '';
+alter table public.requests
+  add column visit text not null default '',
+  add column accompany boolean not null default false;
+
+drop function public.clock_in();
+drop function public.clock_out(integer);
+
+create function public.clock_in(p_visit text, p_accompany boolean default false, p_memo text default '')
+returns public.records language plpgsql security definer set search_path = ''
+as $$
+declare
+  sid uuid := public.my_staff_id();
+  v text := trim(coalesce(p_visit, ''));
+  m text := trim(coalesce(p_memo, ''));
+  r public.records;
+begin
+  if sid is null then raise exception 'アカウントがまだスタッフに紐付いていません'; end if;
+  if v = '' then raise exception '訪問先を選んでください'; end if;
+  if exists (select 1 from public.records where staff_id = sid and out_at is null) then
+    raise exception 'すでに出勤中です。先に退勤してください';
+  end if;
+  insert into public.records (staff_id, user_id, work_date, in_at, visit, accompany, in_memo)
+  values (sid, auth.uid(), (now() at time zone 'Asia/Tokyo')::date, now(), v, coalesce(p_accompany, false), m)
+  returning * into r;
+  if m <> '' then
+    insert into public.notes (staff_id, user_id, resident, cats, body) values (sid, auth.uid(), v, array['申し送り'], m);
+  end if;
+  return r;
+end $$;
+
+create function public.clock_out(p_break integer default 0, p_memo text default '')
+returns public.records language plpgsql security definer set search_path = ''
+as $$
+declare
+  sid uuid := public.my_staff_id();
+  m text := trim(coalesce(p_memo, ''));
+  r public.records;
+begin
+  if sid is null then raise exception 'アカウントがまだスタッフに紐付いていません'; end if;
+  update public.records
+     set out_at = now(), break_min = greatest(0, least(coalesce(p_break, 0), 600)), out_memo = m
+   where id = (select id from public.records where staff_id = sid and out_at is null order by in_at desc limit 1)
+  returning * into r;
+  if r.id is null then raise exception '出勤中の記録がありません'; end if;
+  if m <> '' then
+    insert into public.notes (staff_id, user_id, resident, cats, body) values (sid, auth.uid(), r.visit, array['申し送り'], m);
+  end if;
+  return r;
+end $$;
+
+create or replace function public.approve_request(p_id uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare
+  q public.requests;
+  v_in timestamptz;
+  v_out timestamptz;
+begin
+  if not public.is_admin() then raise exception '管理者だけが承認できます'; end if;
+  select * into q from public.requests where id = p_id for update;
+  if not found or q.status <> 'pending' then raise exception 'この依頼はすでに対応済みです'; end if;
+  v_in  := (q.work_date + q.in_time)  at time zone 'Asia/Tokyo';
+  v_out := (q.work_date + q.out_time) at time zone 'Asia/Tokyo';
+  if v_out <= v_in then v_out := v_out + interval '1 day'; end if;
+  if q.record_id is not null and exists (select 1 from public.records where id = q.record_id) then
+    update public.records
+       set work_date = q.work_date, in_at = v_in, out_at = v_out, break_min = q.break_min, edited_by_admin = true,
+           visit = case when q.visit <> '' then q.visit else visit end, accompany = q.accompany
+     where id = q.record_id;
+  else
+    insert into public.records (staff_id, user_id, work_date, in_at, out_at, break_min, edited_by_admin, visit, accompany)
+    values (q.staff_id, q.user_id, q.work_date, v_in, v_out, q.break_min, true, q.visit, q.accompany);
+  end if;
+  update public.requests set status = 'approved', decided_at = now() where id = p_id;
+end $$;
+
+revoke execute on function public.clock_in(text, boolean, text), public.clock_out(integer, text) from public, anon;
+grant execute on function public.clock_in(text, boolean, text), public.clock_out(integer, text) to authenticated;

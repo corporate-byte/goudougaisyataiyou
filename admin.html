@@ -39,7 +39,7 @@
 
       <div data-panel="today">
         <div id="ad-today-kpi" class="kpis"></div>
-        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th>シフト</th><th>出勤</th><th>退勤</th><th>状態</th></tr></thead><tbody id="ad-today"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th>シフト</th><th>訪問先</th><th>出勤</th><th>退勤</th><th>状態</th></tr></thead><tbody id="ad-today"></tbody></table></div>
       </div>
 
       <div data-panel="att" hidden>
@@ -50,7 +50,7 @@
           </div>
           <button class="btn" type="button" id="rec-add">勤務記録を手で追加</button>
         </div>
-        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">深夜</th><th class="r">残業</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>訪問先</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">深夜</th><th>情報共有事項</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
       </div>
 
       <div data-panel="reqs" hidden class="stack">
@@ -111,7 +111,7 @@
 
       <div data-panel="care" hidden class="stack">
         <div class="row">
-          <label class="f" style="width:200px">利用者さん<input id="ad-care-res" list="res-dl" placeholder="すべて"></label>
+          <label class="f" style="width:200px">訪問先<input id="ad-care-res" list="res-dl" placeholder="すべて"></label>
           <label class="f" style="width:170px">日付<input type="date" id="ad-care-date"></label>
           <button class="btn sm" type="button" id="care-clear">条件をクリア（直近7日）</button>
         </div>
@@ -120,8 +120,8 @@
 
       <div data-panel="cfg" hidden>
         <form class="card stack" id="cfg-form" style="max-width:560px">
-          <h3>利用者さん</h3>
-          <label class="f">1行に1人（ケア記録の候補になります）<textarea id="cfg-res" rows="6" placeholder="佐藤 様&#10;鈴木 様"></textarea></label>
+          <h3>訪問先</h3>
+          <label class="f">1行に1件（出勤時とケア記録の選択肢になります）<textarea id="cfg-res" rows="6" placeholder="佐藤 様&#10;鈴木 様"></textarea></label>
           <h3>給与計算のルール</h3>
           <div class="grid2">
             <label class="f">深夜割増（22時〜5時）%<input type="number" id="cfg-night" min="0" step="1"></label>
@@ -246,9 +246,9 @@ function render() {
     else if (rs.length) st = '<span class="pill mute">退勤済み</span>';
     else if (sh.length && now > at(t, sh[0].start) + 5 * 6e4) { st = '<span class="pill bad">未出勤（遅れ）</span>'; late++; }
     else if (sh.length) st = '<span class="pill info">出勤前</span>';
-    return `<tr><td><strong>${esc(staffName(id))}</strong></td><td class="num">${sh.map(s => `${esc(s.start)}〜${esc(s.end)}`).join('<br>') || '<span class="muted">なし</span>'}</td><td class="num">${rs.map(r => hm(r.inAt)).join('<br>') || '—'}</td><td class="num">${rs.map(r => (r.outAt ? hm(r.outAt) : '—')).join('<br>') || '—'}</td><td>${st}</td></tr>`;
+    return `<tr><td><strong>${esc(staffName(id))}</strong></td><td class="num">${sh.map(s => `${esc(s.start)}〜${esc(s.end)}`).join('<br>') || '<span class="muted">なし</span>'}</td><td>${rs.map(visitLabel).join('<br>') || '—'}</td><td class="num">${rs.map(r => hm(r.inAt)).join('<br>') || '—'}</td><td class="num">${rs.map(r => (r.outAt ? hm(r.outAt) : '—')).join('<br>') || '—'}</td><td>${st}</td></tr>`;
   });
-  $('#ad-today').innerHTML = rows.join('') || '<tr><td colspan="5" class="empty">今日のシフトや出勤記録はまだありません</td></tr>';
+  $('#ad-today').innerHTML = rows.join('') || '<tr><td colspan="6" class="empty">今日のシフトや出勤記録はまだありません</td></tr>';
   const pending = A.requests.filter(q => q.status === 'pending');
   $('#ad-today-kpi').innerHTML = `<div class="kpi"><b class="num">${onCount}人</b><span>いま勤務中</span></div><div class="kpi"><b class="num">${todayShifts.length}件</b><span>今日のシフト</span></div><div class="kpi"><b class="num" style="color:${late ? 'var(--bad)' : 'inherit'}">${late}人</b><span>シフト開始を過ぎて未出勤</span></div><div class="kpi"><b class="num" style="color:${pending.length ? 'var(--warn)' : 'inherit'}">${pending.length}件</b><span>未対応の修正依頼</span></div>`;
   $('#ad-badge').innerHTML = pending.length ? `<span class="badge">${pending.length}</span>` : '';
@@ -256,13 +256,14 @@ function render() {
   /* 勤怠一覧 */
   const m = $('#ad-att-month').value, fs = $('#ad-att-staff').value;
   const ar = recs.filter(r => r.date.startsWith(m) && (!fs || r.staffId === fs)).sort((a, b) => a.inAt - b.inAt);
-  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td class="r">${c && c.ot ? hhmm(c.ot) : '—'}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="9" class="empty">この月の勤務記録はありません</td></tr>';
+  const memoCell = r => { const m = [r.inMemo && '出勤：' + r.inMemo, r.outMemo && '退勤：' + r.outMemo].filter(Boolean).join(' / '); return m ? `<span title="${esc(m)}" style="display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom">${esc(m)}</span>` : '<span class="muted">—</span>'; };
+  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td>${visitLabel(r)}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td>${memoCell(r)}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="10" class="empty">この月の勤務記録はありません</td></tr>';
 
   /* 修正依頼 */
   const reqRow = (q, actions) => {
     const rec = q.record_id ? A.records.get(q.record_id) : null;
     return `<div class="li" style="align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 260px"><strong>${esc(staffName(q.staff_id))}</strong> <span class="muted small">${q.record_id ? '時刻の修正' : '打刻漏れ'}</span>
-      <div class="num">${fmtDate(q.work_date)} ${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}（休憩${q.break_min}分）</div>
+      <div class="num">${fmtDate(q.work_date)} ${q.visit ? esc(q.visit) + (q.accompany ? '（同行）' : '') + ' ' : ''}${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}（休憩${q.break_min}分）</div>
       ${rec ? `<div class="muted small num">現在の記録：${hm(rec.inAt)} 〜 ${rec.outAt ? hm(rec.outAt) : '—'}（休憩${rec.breakMin}分）</div>` : ''}
       <div class="small">理由：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small muted">コメント：${esc(q.admin_comment)}</div>` : ''}</div>
       ${actions ? `<div class="row"><button class="btn sm primary" type="button" data-req-ok="${q.id}">承認して反映</button><button class="btn sm" type="button" data-req-ng="${q.id}">却下</button></div>` : reqPill(q.status)}</div>`;
@@ -276,19 +277,17 @@ function render() {
 function renderPay(recs) {
   const m = $('#ad-pay-month').value, c = A.settings;
   A.payRows = A.staff.map(s => {
-    const rs = recs.filter(r => r.staffId === s.id && r.date.startsWith(m));
-    let work = 0, night = 0, ot = 0, open = 0; const days = new Set();
-    rs.forEach(r => { const x = calc(r, c); if (!x) { open++; return; } work += x.work; night += x.night; ot += x.ot; days.add(r.date); });
+    const { work, night, ot, open, days } = summarize(recs.filter(r => r.staffId === s.id && r.date.startsWith(m)), c);
     const w = Number(s.wage) || 0;
     const base = Math.round(work / 60 * w), nightP = Math.round(night / 60 * w * (c.night_rate / 100)), otP = Math.round(ot / 60 * w * (c.ot_rate / 100));
-    const trans = days.size * (Number(s.transport) || 0);
-    return { s, days: days.size, work, night, ot, base, nightP, otP, trans, total: base + nightP + otP + trans, open };
+    const trans = days * (Number(s.transport) || 0);
+    return { s, days, work, night, ot, base, nightP, otP, trans, total: base + nightP + otP + trans, open };
   }).filter(p => p.days || p.open || p.s.active);
   const P = A.payRows, sum = k => P.reduce((a, p) => a + p[k], 0);
   $('#ad-pay').innerHTML = P.length ? P.map(p => `<tr><td><strong>${esc(p.s.name)}</strong>${p.open ? ` <span class="pill warn">退勤なし${p.open}件</span>` : ''}</td><td class="r">${yen(p.s.wage)}</td><td class="r">${p.days}</td><td class="r">${hhmm(p.work)}</td><td class="r">${hhmm(p.night)}</td><td class="r">${hhmm(p.ot)}</td><td class="r">${yen(p.base)}</td><td class="r">${yen(p.nightP)}</td><td class="r">${yen(p.otP)}</td><td class="r">${yen(p.trans)}</td><td class="r"><strong>${yen(p.total)}</strong></td></tr>`).join('') : '<tr><td colspan="11" class="empty">スタッフを登録すると、ここに給与が計算されます</td></tr>';
   $('#ad-pay-foot').innerHTML = P.length ? `<tr><td>合計</td><td></td><td class="r">${sum('days')}</td><td class="r">${hhmm(sum('work'))}</td><td class="r">${hhmm(sum('night'))}</td><td class="r">${hhmm(sum('ot'))}</td><td class="r">${yen(sum('base'))}</td><td class="r">${yen(sum('nightP'))}</td><td class="r">${yen(sum('otP'))}</td><td class="r">${yen(sum('trans'))}</td><td class="r">${yen(sum('total'))}</td></tr>` : '';
   $('#ad-pay-kpi').innerHTML = `<div class="kpi"><b class="num">${yen(sum('total'))}</b><span>${m.replace('-', '年')}月の支給額合計</span></div><div class="kpi"><b class="num">${hhmm(sum('work'))}</b><span>総実働時間</span></div><div class="kpi"><b class="num">${P.filter(p => p.days).length}人</b><span>出勤したスタッフ</span></div>`;
-  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。深夜（22時〜5時）は${c.night_rate}%、1日${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
+  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。深夜（22時〜5時）は${c.night_rate}%、1日の実働合計（訪問をまたいで合算）が${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
 }
 function renderShifts(shifts) {
   const days = [...Array(7)].map((_, i) => addDays(A.weekStart, i));
@@ -318,9 +317,9 @@ function renderCare() {
 /* ---------- 操作 ---------- */
 function recordModal(r) {
   const staffSel = r ? '' : `<label class="f">スタッフ<select name="staff" required><option value="">選んでください</option>${A.staff.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label>`;
-  openModal(r ? `${staffName(r.staffId)} さんの勤務を編集` : '勤務記録を追加', staffSel + timeForm(r ? { date: r.date, inTime: hm(r.inAt), outTime: r.outAt ? hm(r.outAt) : '', breakMin: r.breakMin } : {}), '保存', async f => {
+  openModal(r ? `${staffName(r.staffId)} さんの勤務を編集` : '勤務記録を追加', staffSel + timeForm(r ? { date: r.date, inTime: hm(r.inAt), outTime: r.outAt ? hm(r.outAt) : '', breakMin: r.breakMin, visit: r.visit, accompany: r.accompany } : {}, A.settings.residents), '保存', async f => {
     const [a, z] = spanFrom(f.date, f.inTime, f.outTime);
-    const body = { work_date: f.date, in_at: toIso(a), out_at: toIso(z), break_min: parseInt(f.breakMin, 10) || 0, edited_by_admin: true };
+    const body = { work_date: f.date, in_at: toIso(a), out_at: toIso(z), break_min: parseInt(f.breakMin, 10) || 0, edited_by_admin: true, visit: f.visit || '', accompany: f.accompany === '1' };
     const res = r ? await run(sb.from('records').update(body).eq('id', r.id), '勤務記録を更新しました')
                   : await run(sb.from('records').insert({ ...body, staff_id: f.staff }), '勤務記録を追加しました');
     if (res.ok) { await loadMonth(f.date.slice(0, 7), true); if (r) await loadMonth(r.date.slice(0, 7), true); await loadOpenRecords(); render(); }

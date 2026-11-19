@@ -26,7 +26,9 @@ const CATS = ['食事', '水分', '排泄', '入浴', '服薬', 'バイタル', 
 const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
 /* DB の行 → 画面で使う形 */
-const normRecord = r => ({ id: r.id, staffId: r.staff_id, userId: r.user_id, date: r.work_date, inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null, breakMin: r.break_min || 0, edited: r.edited_by_admin });
+const normRecord = r => ({ id: r.id, staffId: r.staff_id, userId: r.user_id, date: r.work_date, inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null, breakMin: r.break_min || 0, edited: r.edited_by_admin,
+  visit: r.visit || '', accompany: !!r.accompany, inMemo: r.in_memo || '', outMemo: r.out_memo || '' });
+const visitLabel = r => (r.visit ? esc(r.visit) : '<span class="muted">訪問先なし</span>') + (r.accompany ? ' <span class="pill info">同行</span>' : '');
 const normShift = s => ({ id: s.id, staffId: s.staff_id, date: s.work_date, start: t5(s.start_time), end: t5(s.end_time), memo: s.memo || '' });
 
 /* ---------- 計算 ---------- */
@@ -46,6 +48,14 @@ function calc(r, cfg) {
   return { work, night, ot };
 }
 const suggestBreak = min => (min > 480 ? 60 : min > 360 ? 45 : 0);
+/* 1人分の勤務一覧 → 合計（残業は1日の実働合計が所定時間を超えた分） */
+function summarize(recs, cfg) {
+  let work = 0, night = 0, open = 0; const perDay = {};
+  recs.forEach(r => { const x = calc(r, cfg); if (!x) { open++; return; } work += x.work; night += x.night; perDay[r.date] = (perDay[r.date] || 0) + x.work; });
+  const limit = Math.round(((cfg && cfg.ot_hours) || 8) * 60);
+  const ot = Object.values(perDay).reduce((a, m) => a + Math.max(0, m - limit), 0);
+  return { work, night, ot, open, days: Object.keys(perDay).length, visits: recs.length - open };
+}
 function spanFrom(date, inT, outT) { const a = at(date, inT); let b = outT ? at(date, outT) : null; if (b !== null && b <= a) b += 864e5; return [a, b]; }
 
 /* ---------- 通知・確認 ---------- */
@@ -95,8 +105,10 @@ function openModal(title, body, okText, onSubmit) {
   const f = $('#m-body').querySelector('input,select,textarea'); if (f) f.focus();
 }
 function closeModal() { $('#modal').hidden = true; modalSubmit = null; }
-function timeForm(v) {
-  return `<label class="f">日付<input type="date" name="date" required value="${esc(v.date || today())}"></label>
+function timeForm(v, visits) {
+  const vs = visits ? `<label class="f">訪問先<select name="visit" required><option value="">選んでください</option>${[...new Set([...(visits || []), ...(v.visit ? [v.visit] : [])])].map(x => `<option value="${esc(x)}"${x === v.visit ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+  <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="accompany" value="1" style="width:auto"${v.accompany ? ' checked' : ''}> 同行</label>` : '';
+  return vs + `<label class="f">日付<input type="date" name="date" required value="${esc(v.date || today())}"></label>
   <div class="grid2"><label class="f">出勤<input type="time" name="inTime" required value="${esc(v.inTime || '')}"></label>
   <label class="f">退勤<input type="time" name="outTime" value="${esc(v.outTime || '')}"></label></div>
   <label class="f">休憩（分）<input type="number" name="breakMin" min="0" max="600" step="5" value="${esc(v.breakMin ?? 0)}"></label>

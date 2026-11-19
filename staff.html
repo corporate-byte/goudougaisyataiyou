@@ -33,8 +33,15 @@
         <div class="clock num" id="st-clock">--:--</div>
         <div id="st-status"></div>
         <div id="st-shift"></div>
-        <div id="st-breakbox" hidden style="margin-top:12px;text-align:left">
-          <label class="f">休憩時間（分）<input type="number" id="st-break" min="0" max="600" step="5" inputmode="numeric"></label>
+        <div class="stack" style="margin-top:14px;text-align:left;gap:10px">
+          <div id="st-inbox" class="stack" style="gap:10px">
+            <label class="f">訪問先<select id="st-visit"></select></label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:500"><input type="checkbox" id="st-acc" style="width:auto;transform:scale(1.2)"> 同行</label>
+          </div>
+          <div id="st-breakbox" hidden>
+            <label class="f">休憩時間（分）<input type="number" id="st-break" min="0" max="600" step="5" inputmode="numeric"></label>
+          </div>
+          <label class="f">情報共有事項（任意）<textarea id="st-memo" style="min-height:64px" placeholder="例）食欲あり、表情穏やか。次回は入浴介助あり。"></textarea></label>
         </div>
         <button class="bigbtn in" id="st-punch" type="button">出勤する</button>
       </div>
@@ -61,7 +68,7 @@
         <div data-panel="care" hidden class="stack">
           <form class="card stack" id="care-form">
             <h3>様子を記録する</h3>
-            <label class="f">利用者さん<input id="care-res" list="res-dl" placeholder="名前を選ぶか入力" required></label>
+            <label class="f">訪問先（利用者さん）<input id="care-res" list="res-dl" placeholder="名前を選ぶか入力" required></label>
             <div class="chips" id="care-cats"></div>
             <label class="f">内容<textarea id="care-text" placeholder="例）昼食8割摂取。午後は居室でテレビ。表情穏やか。" required></textarea></label>
             <button class="btn primary" type="submit">記録する</button>
@@ -146,17 +153,18 @@ function renderPunch() {
   $('#st-date').textContent = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）`;
   $('#st-clock').textContent = hm(now);
   const open = openRecord(), btn = $('#st-punch');
+  fillSelect($('#st-visit'), (S.settings.residents || []).map(v => ({ v, t: v })), '訪問先を選んでください');
   if (open) {
     const el = (now - open.inAt) / 6e4;
-    $('#st-status').innerHTML = `<span class="status on">勤務中 ${hm(open.inAt)}〜（${hhmm(el)}経過）</span>`;
+    $('#st-status').innerHTML = `<span class="status on">勤務中 ${hm(open.inAt)}〜（${hhmm(el)}経過）</span><div style="margin-top:8px;font-weight:700">${visitLabel(open)}</div>`;
     btn.textContent = '退勤する'; btn.className = 'bigbtn out';
-    $('#st-breakbox').hidden = false;
+    $('#st-inbox').hidden = true; $('#st-breakbox').hidden = false;
     const bb = $('#st-break'); if (!bb.dataset.touched) bb.value = suggestBreak(el);
   } else {
-    const done = S.records.find(r => r.date === t && r.outAt);
-    $('#st-status').innerHTML = `<span class="status off">${done ? `本日は ${hm(done.inAt)}〜${hm(done.outAt)} で退勤済み` : '未出勤'}</span>`;
+    const todays = S.records.filter(r => r.date === t && r.outAt);
+    $('#st-status').innerHTML = `<span class="status off">${todays.length ? `本日 ${todays.length}件 訪問済み` : '未出勤'}</span>`;
     btn.textContent = '出勤する'; btn.className = 'bigbtn in';
-    $('#st-breakbox').hidden = true; $('#st-break').dataset.touched = '';
+    $('#st-inbox').hidden = false; $('#st-breakbox').hidden = true; $('#st-break').dataset.touched = '';
   }
   const sh = S.shifts.filter(s => s.date === t || (s.date === addDays(t, -1) && shiftSpan(s)[1] > now));
   $('#st-shift').innerHTML = `<div class="shiftline">${sh.length ? '今日のシフト：' + sh.map(s => `<strong class="num">${esc(s.start)}〜${esc(s.end)}</strong>${s.memo ? `（${esc(s.memo)}）` : ''}`).join('、') : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
@@ -171,16 +179,15 @@ function render() {
 
   const m = $('#st-month').value;
   const recs = S.records.filter(r => r.date.startsWith(m)).sort((a, b) => b.inAt - a.inAt);
-  let tw = 0; const days = new Set();
-  recs.forEach(r => { const c = calc(r, S.settings); if (c) { tw += c.work; days.add(r.date); } });
-  $('#st-sum').innerHTML = `<div class="kpi"><b class="num">${days.size}日</b><span>出勤日数</span></div><div class="kpi"><b class="num">${hhmm(tw)}</b><span>実働時間</span></div>`;
+  const sm = summarize(recs, S.settings);
+  $('#st-sum').innerHTML = `<div class="kpi"><b class="num">${sm.days}日</b><span>出勤日数</span></div><div class="kpi"><b class="num">${sm.visits}件</b><span>訪問件数</span></div><div class="kpi"><b class="num">${hhmm(sm.work)}</b><span>実働時間</span></div>`;
   $('#st-hist').innerHTML = recs.length ? recs.map(r => {
     const c = calc(r, S.settings), pend = S.requests.some(q => q.record_id === r.id && q.status === 'pending');
-    return `<div class="li"><div class="daycol">${fmtDate(r.date)}</div><div style="flex:1"><span class="num">${hm(r.inAt)} 〜 ${r.outAt ? hm(r.outAt) : '<span class="pill good">勤務中</span>'}</span><div class="muted small num">休憩 ${r.breakMin}分${c ? ` ・ 実働 ${hhmm(c.work)}` : ''}${r.edited ? ' ・ 管理者が修正' : ''}</div></div>
+    return `<div class="li"><div class="daycol">${fmtDate(r.date)}</div><div style="flex:1"><div>${visitLabel(r)}</div><span class="num">${hm(r.inAt)} 〜 ${r.outAt ? hm(r.outAt) : '<span class="pill good">勤務中</span>'}</span><div class="muted small num">休憩 ${r.breakMin}分${c ? ` ・ 実働 ${hhmm(c.work)}` : ''}${r.edited ? ' ・ 管理者が修正' : ''}</div></div>
       ${pend ? '<span class="pill warn">依頼中</span>' : `<button class="btn sm" type="button" data-req="${r.id}">修正依頼</button>`}</div>`;
   }).join('') : '<div class="empty">この月の勤務記録はありません</div>';
 
-  $('#st-reqs').innerHTML = S.requests.length ? S.requests.map(q => `<div class="li"><div style="flex:1"><strong>${fmtDate(q.work_date)}</strong> <span class="num">${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}</span> <span class="muted small">休憩${q.break_min}分</span><div class="muted small">${q.record_id ? '時刻の修正' : '打刻漏れ'}：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small">管理者より：${esc(q.admin_comment)}</div>` : ''}</div>${reqPill(q.status)}</div>`).join('') : '<div class="empty">修正依頼はまだありません</div>';
+  $('#st-reqs').innerHTML = S.requests.length ? S.requests.map(q => `<div class="li"><div style="flex:1"><strong>${fmtDate(q.work_date)}</strong> ${q.visit ? esc(q.visit) + (q.accompany ? '（同行）' : '') : ''} <span class="num">${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}</span> <span class="muted small">休憩${q.break_min}分</span><div class="muted small">${q.record_id ? '時刻の修正' : '打刻漏れ'}：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small">管理者より：${esc(q.admin_comment)}</div>` : ''}</div>${reqPill(q.status)}</div>`).join('') : '<div class="empty">修正依頼はまだありません</div>';
   renderCare();
 }
 function renderCare() {
@@ -191,10 +198,10 @@ function renderCare() {
 
 /* ---------- 操作 ---------- */
 function requestForm(rec) {
-  const v = rec ? { date: rec.date, inTime: hm(rec.inAt), outTime: rec.outAt ? hm(rec.outAt) : '', breakMin: rec.breakMin } : {};
-  openModal(rec ? '勤務時間の修正依頼' : '打刻漏れの申請', timeForm(v) + `<label class="f">理由<textarea name="reason" required placeholder="例）退勤ボタンを押し忘れました"></textarea></label>`, '依頼を送る', async f => {
+  const v = rec ? { date: rec.date, inTime: hm(rec.inAt), outTime: rec.outAt ? hm(rec.outAt) : '', breakMin: rec.breakMin, visit: rec.visit, accompany: rec.accompany } : {};
+  openModal(rec ? '勤務時間の修正依頼' : '打刻漏れの申請', timeForm(v, S.settings.residents) + `<label class="f">理由<textarea name="reason" required placeholder="例）退勤ボタンを押し忘れました"></textarea></label>`, '依頼を送る', async f => {
     if (!f.outTime) { toast('退勤時刻を入れてください', 'bad'); return false; }
-    const r = await run(sb.from('requests').insert({ staff_id: S.profile.staff_id, user_id: S.uid, record_id: rec ? rec.id : null, work_date: f.date, in_time: f.inTime, out_time: f.outTime, break_min: parseInt(f.breakMin, 10) || 0, reason: f.reason.trim() }), '修正依頼を送りました');
+    const r = await run(sb.from('requests').insert({ staff_id: S.profile.staff_id, user_id: S.uid, record_id: rec ? rec.id : null, work_date: f.date, in_time: f.inTime, out_time: f.outTime, break_min: parseInt(f.breakMin, 10) || 0, reason: f.reason.trim(), visit: f.visit || '', accompany: f.accompany === '1' }), '修正依頼を送りました');
     if (r.ok) loadAll();
     return r.ok;
   });
@@ -212,11 +219,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#req-new').addEventListener('click', () => requestForm(null));
 
   $('#st-punch').addEventListener('click', async e => {
-    const btn = e.currentTarget; if (btn.disabled) return; btn.disabled = true;
-    const r = openRecord()
-      ? await run(sb.rpc('clock_out', { p_break: Math.max(0, parseInt($('#st-break').value, 10) || 0) }), 'お疲れさまでした。退勤を記録しました')
-      : await run(sb.rpc('clock_in'), '出勤を記録しました');
+    const btn = e.currentTarget; if (btn.disabled) return;
+    const open = openRecord(), memo = $('#st-memo').value.trim(), visit = $('#st-visit').value;
+    if (!open && !visit) { toast('訪問先を選んでください', 'bad'); $('#st-visit').focus(); return; }
+    btn.disabled = true;
+    const r = open
+      ? await run(sb.rpc('clock_out', { p_break: Math.max(0, parseInt($('#st-break').value, 10) || 0), p_memo: memo }), 'お疲れさまでした。退勤を記録しました')
+      : await run(sb.rpc('clock_in', { p_visit: visit, p_accompany: $('#st-acc').checked, p_memo: memo }), `${visit} の出勤を記録しました`);
     btn.disabled = false;
+    if (r.ok) { $('#st-memo').value = ''; $('#st-acc').checked = false; $('#st-visit').value = ''; }
     await loadAll();
   });
 
