@@ -150,6 +150,14 @@ function showAuth(mode, opts) {
   };
   box.innerHTML = `<form class="card stack" id="au-form"><div><h2>${titles[mode]}</h2><p class="muted small" style="margin:4px 0 0">${esc(opts.subtitle || '')}</p></div><div id="au-msg"></div>${f[mode]}</form>`;
   box.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => showAuth(b.dataset.mode, opts)));
+  const pw = $('#au-pass');
+  if (pw) {
+    const t = document.createElement('label');
+    t.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted);margin-top:-6px';
+    t.innerHTML = '<input type="checkbox" id="au-show" style="width:auto"> パスワードを表示';
+    pw.closest('label').after(t);
+    $('#au-show').addEventListener('change', e => { pw.type = e.target.checked ? 'text' : 'password'; });
+  }
   const msg = (t, bad) => { $('#au-msg').innerHTML = `<div class="banner ${bad ? 'bad' : 'info'}" style="margin:0">${esc(t)}</div>`; };
   $('#au-form').addEventListener('submit', async e => {
     e.preventDefault();
