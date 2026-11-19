@@ -66,6 +66,8 @@ function errText(e) {
   if (/Email not confirmed/i.test(m)) return 'メールの確認がまだです。届いたメールのリンクを開いてください';
   if (/already registered/i.test(m)) return 'このメールアドレスはすでに登録されています。ログインしてください';
   if (/Password should be/i.test(m)) return 'パスワードは8文字以上にしてください';
+  if (/Signups not allowed|signup_disabled/i.test(m)) return 'いまは新しいアカウント登録が止められています。管理者に連絡してください';
+  if (/rate limit|only request this after/i.test(m)) return 'メールの送信回数が上限に達しました。しばらく（1時間ほど）待ってからもう一度お試しください';
   if (/row-level security|permission denied/i.test(m)) return '権限がありません。管理者に確認してください';
   if (/Failed to fetch|NetworkError/i.test(m)) return '通信できませんでした。電波の良い場所でもう一度お試しください';
   if (/[ぁ-んァ-ン一-龥]/.test(m)) return m;   // サーバー側で日本語にしたメッセージはそのまま
