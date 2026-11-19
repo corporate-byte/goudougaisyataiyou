@@ -29,7 +29,14 @@ const ls = { get(k) { try { return localStorage.getItem(k); } catch { return nul
 const normRecord = r => ({ id: r.id, staffId: r.staff_id, userId: r.user_id, date: r.work_date, inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null, breakMin: r.break_min || 0, edited: r.edited_by_admin,
   visit: r.visit || '', service: r.service || '', accompany: !!r.accompany, inMemo: r.in_memo || '', outMemo: r.out_memo || '' });
 const visitLabel = r => (r.visit ? esc(r.visit) : '<span class="muted">訪問先なし</span>') + (r.accompany ? ' <span class="pill info">同行</span>' : '');
-const normShift = s => ({ id: s.id, staffId: s.staff_id, date: s.work_date, start: t5(s.start_time), end: t5(s.end_time), memo: s.memo || '' });
+const normShift = s => ({ id: s.id, staffId: s.staff_id, date: s.work_date, start: t5(s.start_time), end: t5(s.end_time), memo: s.memo || '', visit: s.visit || '', seriesId: s.series_id || null });
+/* スタッフの色（明るい画面・暗い画面のどちらでも読める濃さ） */
+const STAFF_COLORS = [
+  ['赤', '#d93b3b'], ['青', '#2f6fdb'], ['緑', '#23963f'], ['オレンジ', '#e0700f'], ['紫', '#8d4fd8'],
+  ['ピンク', '#d8418c'], ['水色', '#1497b3'], ['茶', '#9a6634'], ['黄緑', '#6f9a12'], ['グレー', '#7b8580'],
+];
+const WEEK = ['月', '火', '水', '木', '金', '土', '日'];   // 表示順（月曜はじまり）
+const jsDay = i => (i + 1) % 7;                              // WEEK の位置 → Date#getDay()
 
 /* ---------- 計算 ---------- */
 function shiftSpan(s) { const a = at(s.date, s.start); let b = at(s.date, s.end); if (b <= a) b += 864e5; return [a, b]; }

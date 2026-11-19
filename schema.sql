@@ -387,3 +387,12 @@ create policy visits_select on public.visits for select to authenticated using (
 create policy visits_admin_insert on public.visits for insert to authenticated with check ((select public.is_admin()));
 create policy visits_admin_update on public.visits for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy visits_admin_delete on public.visits for delete to authenticated using ((select public.is_admin()));
+
+-- =============================================================
+-- 追加：利用者さん単位のシフト（繰り返し登録）、スタッフの色
+-- =============================================================
+alter table public.shifts alter column staff_id drop not null;
+alter table public.shifts add column visit text not null default '', add column series_id uuid;
+create index on public.shifts (series_id);
+create index on public.shifts (visit, work_date);
+alter table public.staff add column color text not null default '';

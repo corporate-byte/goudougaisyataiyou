@@ -97,6 +97,17 @@ tfoot td{font-weight:700;background:var(--sunk)}
 .kpi span{font-size:.8rem;color:var(--muted)}
 .panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .auth{max-width:400px;margin:8vh auto 0}
+.shift-grid th,.shift-grid td{vertical-align:top;white-space:normal}
+.shift-grid th:first-child,.shift-grid td:first-child{position:sticky;left:0;background:var(--surface);z-index:1;min-width:120px;font-weight:700}
+.shift-grid thead th:first-child{background:var(--sunk)}
+.shift-grid td{min-width:96px}
+.shift-grid th.today,.shift-grid td.today{background:var(--accent-soft)}
+.sh-chip{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 6px;margin-bottom:4px;font:inherit;font-size:.82rem;line-height:1.35;cursor:pointer;color:var(--ink)}
+.sh-chip:hover{border-color:var(--accent)}
+.sh-chip .who{font-weight:700;font-size:.9rem}
+.sh-chip.unassigned{border-style:dashed}
+.legend{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:700;padding:2px 8px;border:1px solid var(--line);border-radius:999px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
 #modal{position:fixed;inset:0;background:rgba(10,20,16,.45);display:grid;place-items:center;z-index:50;
   padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 #modal .card{width:100%;max-width:440px;max-height:100%;overflow:auto}

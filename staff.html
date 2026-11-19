@@ -173,7 +173,9 @@ function renderPunch() {
     $('#st-inbox').hidden = false; $('#st-breakbox').hidden = true; $('#st-break').dataset.touched = '';
   }
   const sh = S.shifts.filter(s => s.date === t || (s.date === addDays(t, -1) && shiftSpan(s)[1] > now));
-  $('#st-shift').innerHTML = `<div class="shiftline">${sh.length ? '今日のシフト：' + sh.map(s => `<strong class="num">${esc(s.start)}〜${esc(s.end)}</strong>${s.memo ? `（${esc(s.memo)}）` : ''}`).join('、') : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
+  /* いまの時間帯のシフトがあれば、その利用者さんを最初から選んでおく */
+  if (!open && !$('#st-visit').value) { const cur = sh.find(s => { const [a, b] = shiftSpan(s); return now >= a - 60 * 6e4 && now <= b && S.visits.includes(s.visit); }); if (cur) $('#st-visit').value = cur.visit; }
+  $('#st-shift').innerHTML = `<div class="shiftline">${sh.length ? '今日のシフト：' + sh.map(s => `<strong class="num">${esc(s.start)}〜${esc(s.end)}</strong>${s.visit ? ` ${esc(s.visit)}` : ""}${s.memo ? `（${esc(s.memo)}）` : ''}`).join('、') : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
 }
 function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
 function render() {
@@ -181,7 +183,7 @@ function render() {
   renderPunch();
   const t = today(), now = Date.now();
   const up = S.shifts.filter(s => s.date >= t || shiftSpan(s)[1] > now);
-  $('#st-shifts').innerHTML = up.length ? up.slice(0, 40).map(s => `<div class="li"><div class="daycol">${fmtDate(s.date)}${s.date === t ? ' <span class="tag">今日</span>' : ''}</div><div style="flex:1"><span class="num">${esc(s.start)} 〜 ${esc(s.end)}</span>${s.end <= s.start ? ' <span class="pill info">翌日まで</span>' : ''}${s.memo ? `<div class="muted small">${esc(s.memo)}</div>` : ''}</div></div>`).join('') : '<div class="empty">これからのシフトはまだ入っていません</div>';
+  $('#st-shifts').innerHTML = up.length ? up.slice(0, 40).map(s => `<div class="li"><div class="daycol">${fmtDate(s.date)}${s.date === t ? ' <span class="tag">今日</span>' : ''}</div><div style="flex:1">${s.visit ? `<strong>${esc(s.visit)}</strong><br>` : ""}<span class="num">${esc(s.start)} 〜 ${esc(s.end)}</span>${s.end <= s.start ? ' <span class="pill info">翌日まで</span>' : ''}${s.memo ? `<div class="muted small">${esc(s.memo)}</div>` : ''}</div></div>`).join('') : '<div class="empty">これからのシフトはまだ入っていません</div>';
 
   const m = $('#st-month').value;
   const recs = S.records.filter(r => r.date.startsWith(m)).sort((a, b) => b.inAt - a.inAt);
