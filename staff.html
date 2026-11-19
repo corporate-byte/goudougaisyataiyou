@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611191620">
+<link rel="stylesheet" href="common.css?v=202611191624">
 </head>
 <body>
 <div class="wrap narrow">
@@ -29,6 +29,10 @@
     </div>
 
     <div id="main" class="stack" hidden>
+      <div id="preview-bar" class="banner info stack" style="gap:8px;margin:0" hidden>
+        <div><strong>管理者のプレビュー表示です。</strong>選んだスタッフのスマホに見える画面を表示しています。打刻・修正依頼・ケア記録のボタンを押しても保存されません。</div>
+        <label class="f" style="color:inherit">表示するスタッフ<select id="preview-staff"></select></label>
+      </div>
       <div class="card punch">
         <div class="date" id="st-date"></div>
         <div class="clock num" id="st-clock">--:--</div>
@@ -100,11 +104,14 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611191620"></script>
-<script src="common.js?v=202611191620"></script>
+<script src="config.js?v=202611191624"></script>
+<script src="common.js?v=202611191624"></script>
 <script>
 'use strict';
-const S = { uid: null, profile: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
+const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
+const mySid = () => (S.profile && S.profile.staff_id) || S.preview;
+/* プレビュー中は保存しない */
+function previewBlocked() { if (!S.preview) return false; toast('プレビュー表示なので保存されません（実際のスタッフの画面ではこのボタンで保存されます）'); return true; }
 
 async function loadProfile() {
   const { data, error } = await sb.from('profiles').select('*').eq('id', S.uid).maybeSingle();
@@ -119,6 +126,18 @@ async function start(session) {
   $('#who-name').textContent = S.profile.display_name || session.user.email;
   const isAdmin = S.profile.role === 'admin';
   $('#to-admin').hidden = !isAdmin;
+  if (!S.profile.staff_id && isAdmin) {
+    /* 管理者でスタッフに紐付いていない → プレビュー表示 */
+    const { data, error } = await sb.from('staff').select('id,name,active').order('created_at');
+    if (error) { toast(errText(error), 'bad'); return; }
+    const list = (data || []).filter(s => s.active);
+    $('#pending').hidden = true; $('#main').hidden = false; $('#preview-bar').hidden = false;
+    if (!list.length) { $('#preview-bar').insertAdjacentHTML('beforeend', '<div>スタッフがまだ登録されていません。管理画面の「スタッフ」タブで追加してください。</div>'); return; }
+    fillSelect($('#preview-staff'), list.map(s => ({ v: s.id, t: s.name })));
+    S.preview = list[0].id; $('#preview-staff').value = S.preview;
+    await loadAll();
+    return;
+  }
   if (!S.profile.staff_id) {
     $('#pending').hidden = false; $('#main').hidden = true;
     $('#pending-name').textContent = S.profile.display_name || '（未入力）';
@@ -130,13 +149,13 @@ async function start(session) {
   await loadAll();
 }
 async function loadAll() {
-  const sid = S.profile.staff_id, from = addDays(today(), -100);
+  const sid = mySid(), from = addDays(today(), -100);
   const [dir, st, sh, rec, req, nt, vs] = await Promise.all([
     sb.rpc('staff_directory'),
     sb.from('settings').select('*').eq('id', 1).maybeSingle(),
     sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', addDays(today(), -1)).order('work_date').order('start_time').limit(200),
     sb.from('records').select('*').eq('staff_id', sid).gte('work_date', from).order('in_at', { ascending: false }).limit(500),
-    sb.from('requests').select('*').eq('user_id', S.uid).order('created_at', { ascending: false }).limit(100),
+    (S.preview ? sb.from('requests').select('*').eq('staff_id', sid) : sb.from('requests').select('*').eq('user_id', S.uid)).order('created_at', { ascending: false }).limit(100),
     sb.from('notes').select('*').gte('created_at', new Date(Date.now() - 3 * 864e5).toISOString()).order('created_at', { ascending: false }).limit(300),
     sb.from('visits').select('name').eq('active', true).order('created_at'),
   ]);
@@ -208,6 +227,7 @@ function renderCare() {
 function requestForm(rec) {
   const v = rec ? { date: rec.date, inTime: hm(rec.inAt), outTime: rec.outAt ? hm(rec.outAt) : '', breakMin: rec.breakMin, visit: rec.visit, accompany: rec.accompany } : {};
   openModal(rec ? '勤務時間の修正依頼' : '打刻漏れの申請', timeForm(v, S.visits) + `<label class="f">理由<textarea name="reason" required placeholder="例）退勤ボタンを押し忘れました"></textarea></label>`, '依頼を送る', async f => {
+    if (previewBlocked()) return true;
     if (!f.outTime) { toast('退勤時刻を入れてください', 'bad'); return false; }
     const r = await run(sb.from('requests').insert({ staff_id: S.profile.staff_id, user_id: S.uid, record_id: rec ? rec.id : null, work_date: f.date, in_time: f.inTime, out_time: f.outTime, break_min: parseInt(f.breakMin, 10) || 0, reason: f.reason.trim(), visit: f.visit || '', accompany: f.accompany === '1' }), '修正依頼を送りました');
     if (r.ok) loadAll();
@@ -230,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = e.currentTarget; if (btn.disabled) return;
     const open = openRecord(), memo = $('#st-memo').value.trim(), visit = $('#st-visit').value;
     if (!open && !visit) { toast('訪問先を選んでください', 'bad'); $('#st-visit').focus(); return; }
+    if (previewBlocked()) return;
     btn.disabled = true;
     const r = open
       ? await run(sb.rpc('clock_out', { p_break: Math.max(0, parseInt($('#st-break').value, 10) || 0), p_memo: memo }), 'お疲れさまでした。退勤を記録しました')
@@ -243,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const resident = $('#care-res').value.trim(), body = $('#care-text').value.trim();
     if (!resident || !body) return;
+    if (previewBlocked()) return;
     const cats = $$('#care-cats .chip[aria-pressed="true"]').map(b => b.dataset.cat);
     const r = await run(sb.from('notes').insert({ staff_id: S.profile.staff_id, user_id: S.uid, resident, cats, body }), '記録しました');
     if (r.ok) { $('#care-text').value = ''; $$('#care-cats .chip').forEach(b => b.setAttribute('aria-pressed', 'false')); loadAll(); }
@@ -255,8 +277,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dn) armDelete(dn, async () => { const r = await run(sb.from('notes').delete().eq('id', dn.dataset.delNote), '記録を削除しました'); if (r.ok) loadAll(); });
   });
 
-  setInterval(() => { if (S.profile && S.profile.staff_id) renderPunch(); }, 15000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.profile && S.profile.staff_id) loadAll(); });
+  setInterval(() => { if (mySid()) renderPunch(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && mySid()) loadAll(); });
+  $('#preview-staff').addEventListener('change', async e => {
+    S.preview = e.target.value; $('#st-visit').value = ''; $('#st-memo').value = ''; await loadAll();
+  });
 
   bootAuth({ signup: true, subtitle: 'スタッフ用', onSession: start });
 });
