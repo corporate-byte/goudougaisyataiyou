@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e6a5a">
+<title>ケアタイム勤怠 管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><div class="brand-mark">ケ</div><h1>ケアタイム勤怠 管理</h1></div>
+    <div class="who" id="who" hidden><span id="who-name"></span><button class="btn sm" type="button" id="refresh">最新にする</button><button class="btn sm" type="button" id="logout">ログアウト</button></div>
+  </header>
+
+  <div id="auth" class="auth" hidden></div>
+
+  <main id="app" hidden>
+    <div id="notadmin" class="card stack" hidden>
+      <h2>このアカウントには管理者権限がありません</h2>
+      <p class="muted" style="margin:0">スタッフの方は <a href="staff.html">スタッフ用ページ</a> を使ってください。管理者を増やすときは、今の管理者が「スタッフ」タブのアカウント一覧で権限を変更できます。</p>
+    </div>
+
+    <div id="adm" hidden>
+      <div class="tabs" role="tablist" id="ad-tabs">
+        <button role="tab" data-tab="today" aria-selected="true">今日</button>
+        <button role="tab" data-tab="att" aria-selected="false">勤怠一覧</button>
+        <button role="tab" data-tab="reqs" aria-selected="false">修正依頼<span id="ad-badge"></span></button>
+        <button role="tab" data-tab="pay" aria-selected="false">給与計算</button>
+        <button role="tab" data-tab="shifts" aria-selected="false">シフト</button>
+        <button role="tab" data-tab="staff" aria-selected="false">スタッフ</button>
+        <button role="tab" data-tab="care" aria-selected="false">ケア記録</button>
+        <button role="tab" data-tab="cfg" aria-selected="false">設定</button>
+      </div>
+
+      <div data-panel="today">
+        <div id="ad-today-kpi" class="kpis"></div>
+        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th>シフト</th><th>出勤</th><th>退勤</th><th>状態</th></tr></thead><tbody id="ad-today"></tbody></table></div>
+      </div>
+
+      <div data-panel="att" hidden>
+        <div class="panel-head">
+          <div class="row">
+            <label class="f">月<input type="month" id="ad-att-month"></label>
+            <label class="f" style="width:180px">スタッフ<select id="ad-att-staff"></select></label>
+          </div>
+          <button class="btn" type="button" id="rec-add">勤務記録を手で追加</button>
+        </div>
+        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">深夜</th><th class="r">残業</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
+      </div>
+
+      <div data-panel="reqs" hidden class="stack">
+        <div class="card"><h3 style="margin-bottom:6px">未対応</h3><div id="ad-req-open" class="list"></div></div>
+        <div class="card"><h3 style="margin-bottom:6px">最近対応したもの</h3><div id="ad-req-done" class="list"></div></div>
+      </div>
+
+      <div data-panel="pay" hidden>
+        <div class="panel-head">
+          <label class="f">対象月<input type="month" id="ad-pay-month"></label>
+          <button class="btn" type="button" id="pay-copy">表をコピー（Excel貼り付け用）</button>
+        </div>
+        <div id="ad-pay-kpi" class="kpis"></div>
+        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th class="r">時給</th><th class="r">日数</th><th class="r">実働</th><th class="r">深夜</th><th class="r">残業</th><th class="r">基本給</th><th class="r">深夜手当</th><th class="r">残業手当</th><th class="r">交通費</th><th class="r">支給額</th></tr></thead><tbody id="ad-pay"></tbody><tfoot id="ad-pay-foot"></tfoot></table></div>
+        <p class="muted small" id="ad-pay-note"></p>
+        <textarea id="ad-pay-csv" hidden readonly></textarea>
+      </div>
+
+      <div data-panel="shifts" hidden class="stack">
+        <form class="card" id="shift-form">
+          <h3 style="margin-bottom:10px">シフトを入れる</h3>
+          <div class="row">
+            <label class="f" style="flex:1 1 150px">スタッフ<select id="sh-staff" required></select></label>
+            <label class="f" style="flex:1 1 140px">日付<input type="date" id="sh-date" required></label>
+            <label class="f" style="flex:0 1 110px">開始<input type="time" id="sh-start" value="09:00" required></label>
+            <label class="f" style="flex:0 1 110px">終了<input type="time" id="sh-end" value="18:00" required></label>
+            <label class="f" style="flex:1 1 140px">メモ<input id="sh-memo" placeholder="例）夜勤・2F担当"></label>
+            <button class="btn primary" type="submit">追加</button>
+          </div>
+          <p class="muted small" style="margin:8px 0 0">終了が開始より早い時刻なら、翌日終了（夜勤）として扱います。追加すると日付が翌日に進むので、続けて入力できます。</p>
+        </form>
+        <div class="card">
+          <div class="panel-head">
+            <h3>週のシフト</h3>
+            <div class="row"><button class="btn sm" type="button" id="wk-prev">← 前週</button><span id="wk-label" class="num" style="align-self:center"></span><button class="btn sm" type="button" id="wk-next">次週 →</button></div>
+          </div>
+          <div id="ad-shifts" class="list"></div>
+        </div>
+      </div>
+
+      <div data-panel="staff" hidden class="stack">
+        <form class="card" id="staff-form">
+          <h3 style="margin-bottom:10px">スタッフを追加</h3>
+          <div class="row">
+            <label class="f" style="flex:2 1 160px">名前<input id="sf-name" required placeholder="例）山田 花子"></label>
+            <label class="f" style="flex:1 1 110px">時給（円）<input type="number" id="sf-wage" min="0" step="1" required value="1100"></label>
+            <label class="f" style="flex:1 1 110px">交通費（円/日）<input type="number" id="sf-trans" min="0" step="1" value="0"></label>
+            <button class="btn primary" type="submit">追加</button>
+          </div>
+        </form>
+        <div class="tbl-wrap"><table><thead><tr><th>名前</th><th class="r">時給</th><th class="r">交通費/日</th><th>ログイン用アカウント</th><th></th></tr></thead><tbody id="ad-staff"></tbody></table></div>
+        <div class="card">
+          <h3>登録されたアカウント</h3>
+          <p class="muted small" style="margin:4px 0 10px">スタッフが staff.html でアカウント登録すると、ここに出ます。スタッフ名を選んで「保存」すると、その人が出勤・退勤できるようになります。</p>
+          <div id="ad-accounts" class="list"></div>
+        </div>
+      </div>
+
+      <div data-panel="care" hidden class="stack">
+        <div class="row">
+          <label class="f" style="width:200px">利用者さん<input id="ad-care-res" list="res-dl" placeholder="すべて"></label>
+          <label class="f" style="width:170px">日付<input type="date" id="ad-care-date"></label>
+          <button class="btn sm" type="button" id="care-clear">条件をクリア（直近7日）</button>
+        </div>
+        <div class="card"><div id="ad-care"></div></div>
+      </div>
+
+      <div data-panel="cfg" hidden>
+        <form class="card stack" id="cfg-form" style="max-width:560px">
+          <h3>利用者さん</h3>
+          <label class="f">1行に1人（ケア記録の候補になります）<textarea id="cfg-res" rows="6" placeholder="佐藤 様&#10;鈴木 様"></textarea></label>
+          <h3>給与計算のルール</h3>
+          <div class="grid2">
+            <label class="f">深夜割増（22時〜5時）%<input type="number" id="cfg-night" min="0" step="1"></label>
+            <label class="f">残業割増 %<input type="number" id="cfg-ot" min="0" step="1"></label>
+            <label class="f">1日の所定（時間）<input type="number" id="cfg-otmin" min="1" step="0.5"></label>
+          </div>
+          <button class="btn primary" type="submit" style="align-self:flex-start">保存</button>
+        </form>
+      </div>
+    </div>
+  </main>
+</div>
+
+<datalist id="res-dl"></datalist>
+<div id="modal" hidden>
+  <form class="card stack" id="m-form">
+    <h2 id="m-title"></h2>
+    <div id="m-body" class="stack"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn" type="button" id="m-cancel">キャンセル</button><button class="btn primary" type="submit" id="m-ok">保存</button></div>
+  </form>
+</div>
+<div id="toast" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+'use strict';
+const A = { uid: null, me: null, staff: [], profiles: [], settings: { residents: [], night_rate: 25, ot_rate: 25, ot_hours: 8 },
+  shifts: new Map(), records: new Map(), requests: [], notes: [], weekStart: null, loadedMonths: new Set(), payRows: [] };
+const staffById = id => A.staff.find(s => s.id === id);
+const staffName = id => (staffById(id) || {}).name || '（不明）';
+const toIso = ms => (ms == null ? null : new Date(ms).toISOString());
+
+/* PostgREST は1回1000行までなので、範囲指定で全部取る */
+async function fetchAll(build) {
+  const out = [];
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await build().range(i, i + 999);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < 1000) return out;
+  }
+}
+
+/* ---------- 読み込み ---------- */
+async function loadBase() {
+  const [st, pf, cfg, rq] = await Promise.all([
+    sb.from('staff').select('*').order('created_at'),
+    sb.from('profiles').select('*').order('created_at'),
+    sb.from('settings').select('*').eq('id', 1).maybeSingle(),
+    sb.from('requests').select('*').order('created_at', { ascending: false }).limit(300),
+  ]);
+  [st, pf, cfg, rq].forEach(r => { if (r.error) toast(errText(r.error), 'bad'); });
+  A.staff = st.data || []; A.profiles = pf.data || []; A.requests = rq.data || [];
+  if (cfg.data) A.settings = cfg.data;
+  $('#cfg-res').value = (A.settings.residents || []).join('\n');
+  $('#cfg-night').value = A.settings.night_rate; $('#cfg-ot').value = A.settings.ot_rate; $('#cfg-otmin').value = A.settings.ot_hours;
+}
+async function loadRecordsRange(from, to) {
+  try {
+    const rows = await fetchAll(() => sb.from('records').select('*').gte('work_date', from).lte('work_date', to).order('in_at'));
+    [...A.records.values()].forEach(r => { if (r.date >= from && r.date <= to) A.records.delete(r.id); });
+    rows.forEach(r => A.records.set(r.id, normRecord(r)));
+  } catch (e) { toast(errText(e), 'bad'); }
+}
+async function loadOpenRecords() {
+  const { data, error } = await sb.from('records').select('*').is('out_at', null);
+  if (error) { toast(errText(error), 'bad'); return; }
+  data.forEach(r => A.records.set(r.id, normRecord(r)));
+}
+async function loadMonth(m, force) {
+  if (!force && A.loadedMonths.has(m)) return;
+  const [a, b] = monthRange(m);
+  await loadRecordsRange(a, b); A.loadedMonths.add(m);
+}
+async function loadShifts(from, to) {
+  try {
+    const rows = await fetchAll(() => sb.from('shifts').select('*').gte('work_date', from).lte('work_date', to).order('work_date'));
+    [...A.shifts.values()].forEach(s => { if (s.date >= from && s.date <= to) A.shifts.delete(s.id); });
+    rows.forEach(s => A.shifts.set(s.id, normShift(s)));
+  } catch (e) { toast(errText(e), 'bad'); }
+}
+async function loadNotes() {
+  const res = $('#ad-care-res').value.trim(), d = $('#ad-care-date').value;
+  let q = sb.from('notes').select('*').order('created_at', { ascending: false }).limit(500);
+  if (res) q = q.ilike('resident', `%${res}%`);
+  if (d) { const s = new Date(at(d, '00:00')), e = new Date(at(addDays(d, 1), '00:00')); q = q.gte('created_at', s.toISOString()).lt('created_at', e.toISOString()); }
+  else if (!res) q = q.gte('created_at', new Date(Date.now() - 7 * 864e5).toISOString());
+  const { data, error } = await q;
+  if (error) toast(errText(error), 'bad'); else A.notes = data;
+}
+async function reloadAll() {
+  const t = today();
+  await loadBase();
+  await Promise.all([
+    loadRecordsRange(addDays(t, -1), t), loadOpenRecords(),
+    loadMonth($('#ad-att-month').value, true), loadMonth($('#ad-pay-month').value, true),
+    loadShifts(addDays(A.weekStart, -1), addDays(A.weekStart, 7)), loadShifts(t, t), loadNotes(),
+  ]);
+  render();
+}
+
+/* ---------- 描画 ---------- */
+function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
+function render() {
+  $('#res-dl').innerHTML = (A.settings.residents || []).map(r => `<option value="${esc(r)}">`).join('');
+  fillSelect($('#sh-staff'), A.staff.filter(s => s.active).map(s => ({ v: s.id, t: s.name })), 'スタッフを選ぶ');
+  fillSelect($('#ad-att-staff'), A.staff.map(s => ({ v: s.id, t: s.name })), 'すべて');
+  const recs = [...A.records.values()], shifts = [...A.shifts.values()], t = today(), now = Date.now();
+
+  /* 今日 */
+  const todayShifts = shifts.filter(s => s.date === t);
+  const ids = new Set([...todayShifts.map(s => s.staffId), ...recs.filter(r => r.date === t || !r.outAt).map(r => r.staffId)]);
+  let onCount = 0, late = 0;
+  const rows = [...ids].map(id => {
+    const sh = todayShifts.filter(s => s.staffId === id).sort((a, b) => a.start.localeCompare(b.start));
+    const rs = recs.filter(r => r.staffId === id && (r.date === t || !r.outAt)).sort((a, b) => a.inAt - b.inAt);
+    const open = rs.find(r => !r.outAt);
+    let st = '';
+    if (open) { st = '<span class="pill good">勤務中</span>'; onCount++; }
+    else if (rs.length) st = '<span class="pill mute">退勤済み</span>';
+    else if (sh.length && now > at(t, sh[0].start) + 5 * 6e4) { st = '<span class="pill bad">未出勤（遅れ）</span>'; late++; }
+    else if (sh.length) st = '<span class="pill info">出勤前</span>';
+    return `<tr><td><strong>${esc(staffName(id))}</strong></td><td class="num">${sh.map(s => `${esc(s.start)}〜${esc(s.end)}`).join('<br>') || '<span class="muted">なし</span>'}</td><td class="num">${rs.map(r => hm(r.inAt)).join('<br>') || '—'}</td><td class="num">${rs.map(r => (r.outAt ? hm(r.outAt) : '—')).join('<br>') || '—'}</td><td>${st}</td></tr>`;
+  });
+  $('#ad-today').innerHTML = rows.join('') || '<tr><td colspan="5" class="empty">今日のシフトや出勤記録はまだありません</td></tr>';
+  const pending = A.requests.filter(q => q.status === 'pending');
+  $('#ad-today-kpi').innerHTML = `<div class="kpi"><b class="num">${onCount}人</b><span>いま勤務中</span></div><div class="kpi"><b class="num">${todayShifts.length}件</b><span>今日のシフト</span></div><div class="kpi"><b class="num" style="color:${late ? 'var(--bad)' : 'inherit'}">${late}人</b><span>シフト開始を過ぎて未出勤</span></div><div class="kpi"><b class="num" style="color:${pending.length ? 'var(--warn)' : 'inherit'}">${pending.length}件</b><span>未対応の修正依頼</span></div>`;
+  $('#ad-badge').innerHTML = pending.length ? `<span class="badge">${pending.length}</span>` : '';
+
+  /* 勤怠一覧 */
+  const m = $('#ad-att-month').value, fs = $('#ad-att-staff').value;
+  const ar = recs.filter(r => r.date.startsWith(m) && (!fs || r.staffId === fs)).sort((a, b) => a.inAt - b.inAt);
+  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td class="r">${c && c.ot ? hhmm(c.ot) : '—'}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="9" class="empty">この月の勤務記録はありません</td></tr>';
+
+  /* 修正依頼 */
+  const reqRow = (q, actions) => {
+    const rec = q.record_id ? A.records.get(q.record_id) : null;
+    return `<div class="li" style="align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 260px"><strong>${esc(staffName(q.staff_id))}</strong> <span class="muted small">${q.record_id ? '時刻の修正' : '打刻漏れ'}</span>
+      <div class="num">${fmtDate(q.work_date)} ${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}（休憩${q.break_min}分）</div>
+      ${rec ? `<div class="muted small num">現在の記録：${hm(rec.inAt)} 〜 ${rec.outAt ? hm(rec.outAt) : '—'}（休憩${rec.breakMin}分）</div>` : ''}
+      <div class="small">理由：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small muted">コメント：${esc(q.admin_comment)}</div>` : ''}</div>
+      ${actions ? `<div class="row"><button class="btn sm primary" type="button" data-req-ok="${q.id}">承認して反映</button><button class="btn sm" type="button" data-req-ng="${q.id}">却下</button></div>` : reqPill(q.status)}</div>`;
+  };
+  $('#ad-req-open').innerHTML = pending.length ? pending.slice().reverse().map(q => reqRow(q, true)).join('') : '<div class="empty">未対応の依頼はありません</div>';
+  const done = A.requests.filter(q => q.status !== 'pending').sort((a, b) => String(b.decided_at).localeCompare(String(a.decided_at))).slice(0, 40);
+  $('#ad-req-done').innerHTML = done.length ? done.map(q => reqRow(q, false)).join('') : '<div class="empty">まだありません</div>';
+
+  renderPay(recs); renderShifts(shifts); renderStaff(); renderCare();
+}
+function renderPay(recs) {
+  const m = $('#ad-pay-month').value, c = A.settings;
+  A.payRows = A.staff.map(s => {
+    const rs = recs.filter(r => r.staffId === s.id && r.date.startsWith(m));
+    let work = 0, night = 0, ot = 0, open = 0; const days = new Set();
+    rs.forEach(r => { const x = calc(r, c); if (!x) { open++; return; } work += x.work; night += x.night; ot += x.ot; days.add(r.date); });
+    const w = Number(s.wage) || 0;
+    const base = Math.round(work / 60 * w), nightP = Math.round(night / 60 * w * (c.night_rate / 100)), otP = Math.round(ot / 60 * w * (c.ot_rate / 100));
+    const trans = days.size * (Number(s.transport) || 0);
+    return { s, days: days.size, work, night, ot, base, nightP, otP, trans, total: base + nightP + otP + trans, open };
+  }).filter(p => p.days || p.open || p.s.active);
+  const P = A.payRows, sum = k => P.reduce((a, p) => a + p[k], 0);
+  $('#ad-pay').innerHTML = P.length ? P.map(p => `<tr><td><strong>${esc(p.s.name)}</strong>${p.open ? ` <span class="pill warn">退勤なし${p.open}件</span>` : ''}</td><td class="r">${yen(p.s.wage)}</td><td class="r">${p.days}</td><td class="r">${hhmm(p.work)}</td><td class="r">${hhmm(p.night)}</td><td class="r">${hhmm(p.ot)}</td><td class="r">${yen(p.base)}</td><td class="r">${yen(p.nightP)}</td><td class="r">${yen(p.otP)}</td><td class="r">${yen(p.trans)}</td><td class="r"><strong>${yen(p.total)}</strong></td></tr>`).join('') : '<tr><td colspan="11" class="empty">スタッフを登録すると、ここに給与が計算されます</td></tr>';
+  $('#ad-pay-foot').innerHTML = P.length ? `<tr><td>合計</td><td></td><td class="r">${sum('days')}</td><td class="r">${hhmm(sum('work'))}</td><td class="r">${hhmm(sum('night'))}</td><td class="r">${hhmm(sum('ot'))}</td><td class="r">${yen(sum('base'))}</td><td class="r">${yen(sum('nightP'))}</td><td class="r">${yen(sum('otP'))}</td><td class="r">${yen(sum('trans'))}</td><td class="r">${yen(sum('total'))}</td></tr>` : '';
+  $('#ad-pay-kpi').innerHTML = `<div class="kpi"><b class="num">${yen(sum('total'))}</b><span>${m.replace('-', '年')}月の支給額合計</span></div><div class="kpi"><b class="num">${hhmm(sum('work'))}</b><span>総実働時間</span></div><div class="kpi"><b class="num">${P.filter(p => p.days).length}人</b><span>出勤したスタッフ</span></div>`;
+  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。深夜（22時〜5時）は${c.night_rate}%、1日${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
+}
+function renderShifts(shifts) {
+  const days = [...Array(7)].map((_, i) => addDays(A.weekStart, i));
+  $('#wk-label').textContent = `${fmtDate(days[0])} 〜 ${fmtDate(days[6])}`;
+  $('#ad-shifts').innerHTML = days.map(d => {
+    const ss = shifts.filter(s => s.date === d).sort((a, b) => a.start.localeCompare(b.start));
+    return `<div class="li" style="align-items:flex-start"><div class="daycol">${fmtDate(d)}${d === today() ? ' <span class="tag">今日</span>' : ''}</div><div style="flex:1" class="stack">${ss.length ? ss.map(s => `<div class="row" style="justify-content:space-between;align-items:center"><div><strong>${esc(staffName(s.staffId))}</strong> <span class="num">${esc(s.start)}〜${esc(s.end)}</span>${s.memo ? ` <span class="muted small">${esc(s.memo)}</span>` : ''}</div><button class="btn sm danger" type="button" data-shift-del="${s.id}">削除</button></div>`).join('') : '<span class="muted small">シフトなし</span>'}</div></div>`;
+  }).join('');
+}
+function renderStaff() {
+  $('#ad-staff').innerHTML = A.staff.length ? A.staff.map(s => {
+    const acc = A.profiles.filter(p => p.staff_id === s.id);
+    return `<tr><td><strong>${esc(s.name)}</strong>${s.active ? '' : ' <span class="pill mute">退職</span>'}</td><td class="r">${yen(s.wage)}</td><td class="r">${yen(s.transport)}</td><td>${acc.map(p => `<span class="pill good">${esc(p.email || p.display_name)}</span>`).join(' ') || '<span class="pill mute">未登録</span>'}</td><td><button class="btn sm" type="button" data-staff-edit="${s.id}">編集</button></td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="empty">まだスタッフがいません。上のフォームから追加してください</td></tr>';
+  const opts = A.staff.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  const sorted = A.profiles.slice().sort((a, b) => (a.staff_id ? 1 : 0) - (b.staff_id ? 1 : 0));
+  $('#ad-accounts').innerHTML = sorted.length ? sorted.map(p => `<div class="li" style="flex-wrap:wrap"><div style="flex:1 1 220px"><strong>${esc(p.display_name || '（名前なし）')}</strong>${p.id === A.uid ? ' <span class="tag">あなた</span>' : ''}${p.staff_id ? '' : ' <span class="pill warn">紐付け待ち</span>'}<div class="muted small">${esc(p.email || '')}</div></div>
+    <div class="row" style="align-items:center"><select data-acc-staff="${p.id}" style="width:160px"><option value="">（スタッフ未選択）</option>${opts}</select>
+    <select data-acc-role="${p.id}" style="width:110px"><option value="staff">スタッフ</option><option value="admin">管理者</option></select>
+    <button class="btn sm primary" type="button" data-acc-save="${p.id}">保存</button></div></div>`).join('') : '<div class="empty">まだアカウントがありません</div>';
+  sorted.forEach(p => { $(`[data-acc-staff="${p.id}"]`).value = p.staff_id || ''; $(`[data-acc-role="${p.id}"]`).value = p.role; });
+}
+function renderCare() {
+  $('#ad-care').innerHTML = A.notes.length ? A.notes.map(n => { const ts = Date.parse(n.created_at); return `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${fmtDate(dk(ts))} ${hm(ts)}</span><span class="muted">記録：${esc(staffName(n.staff_id))}</span><button class="btn sm danger" type="button" data-note-del="${n.id}" style="margin-left:auto">削除</button></div><p>${esc(n.body)}</p></div>`; }).join('') : '<div class="empty">該当する記録はありません</div>';
+}
+
+/* ---------- 操作 ---------- */
+function recordModal(r) {
+  const staffSel = r ? '' : `<label class="f">スタッフ<select name="staff" required><option value="">選んでください</option>${A.staff.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label>`;
+  openModal(r ? `${staffName(r.staffId)} さんの勤務を編集` : '勤務記録を追加', staffSel + timeForm(r ? { date: r.date, inTime: hm(r.inAt), outTime: r.outAt ? hm(r.outAt) : '', breakMin: r.breakMin } : {}), '保存', async f => {
+    const [a, z] = spanFrom(f.date, f.inTime, f.outTime);
+    const body = { work_date: f.date, in_at: toIso(a), out_at: toIso(z), break_min: parseInt(f.breakMin, 10) || 0, edited_by_admin: true };
+    const res = r ? await run(sb.from('records').update(body).eq('id', r.id), '勤務記録を更新しました')
+                  : await run(sb.from('records').insert({ ...body, staff_id: f.staff }), '勤務記録を追加しました');
+    if (res.ok) { await loadMonth(f.date.slice(0, 7), true); if (r) await loadMonth(r.date.slice(0, 7), true); await loadOpenRecords(); render(); }
+    return res.ok;
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const m = today().slice(0, 7);
+  ['#ad-att-month', '#ad-pay-month'].forEach(s => { $(s).value = m; });
+  $('#sh-date').value = today();
+  const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); A.weekStart = dk(d.getTime());
+  setupTabs('#ad-tabs', 'ct-ad-tab');
+  $('#logout').addEventListener('click', signOut);
+  $('#refresh').addEventListener('click', async () => { await reloadAll(); toast('最新の状態にしました'); });
+  $('#ad-att-month').addEventListener('input', async e => { await loadMonth(e.target.value); render(); });
+  $('#ad-pay-month').addEventListener('input', async e => { await loadMonth(e.target.value); render(); });
+  $('#ad-att-staff').addEventListener('input', render);
+  let careTimer; const careReload = () => { clearTimeout(careTimer); careTimer = setTimeout(async () => { await loadNotes(); renderCare(); }, 350); };
+  $('#ad-care-res').addEventListener('input', careReload); $('#ad-care-date').addEventListener('input', careReload);
+  $('#care-clear').addEventListener('click', () => { $('#ad-care-res').value = ''; $('#ad-care-date').value = ''; careReload(); });
+  const moveWeek = async n => { A.weekStart = addDays(A.weekStart, n); await loadShifts(A.weekStart, addDays(A.weekStart, 6)); render(); };
+  $('#wk-prev').addEventListener('click', () => moveWeek(-7)); $('#wk-next').addEventListener('click', () => moveWeek(7));
+  $('#rec-add').addEventListener('click', () => recordModal(null));
+
+  $('#staff-form').addEventListener('submit', async e => {
+    e.preventDefault(); const name = $('#sf-name').value.trim(); if (!name) return;
+    const r = await run(sb.from('staff').insert({ name, wage: Number($('#sf-wage').value) || 0, transport: Number($('#sf-trans').value) || 0 }), `${name} さんを追加しました`);
+    if (r.ok) { $('#sf-name').value = ''; await loadBase(); render(); }
+  });
+  $('#shift-form').addEventListener('submit', async e => {
+    e.preventDefault(); const staff_id = $('#sh-staff').value, date = $('#sh-date').value; if (!staff_id || !date) return;
+    const r = await run(sb.from('shifts').insert({ staff_id, work_date: date, start_time: $('#sh-start').value, end_time: $('#sh-end').value, memo: $('#sh-memo').value.trim() }), `${fmtDate(date)} のシフトを追加しました`);
+    if (r.ok) { $('#sh-date').value = addDays(date, 1); $('#sh-memo').value = ''; await loadShifts(date, date); render(); }
+  });
+  $('#cfg-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const residents = $('#cfg-res').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const r = await run(sb.from('settings').update({ residents, night_rate: Number($('#cfg-night').value) || 0, ot_rate: Number($('#cfg-ot').value) || 0, ot_hours: Number($('#cfg-otmin').value) || 8 }).eq('id', 1), '設定を保存しました');
+    if (r.ok) { await loadBase(); render(); }
+  });
+  $('#pay-copy').addEventListener('click', async () => {
+    const head = ['スタッフ', '時給', '日数', '実働', '深夜', '残業', '基本給', '深夜手当', '残業手当', '交通費', '支給額'];
+    const text = [head, ...A.payRows.map(p => [p.s.name, p.s.wage, p.days, hhmm(p.work), hhmm(p.night), hhmm(p.ot), p.base, p.nightP, p.otP, p.trans, p.total])].map(r => r.join('\t')).join('\n');
+    const ta = $('#ad-pay-csv');
+    try { await navigator.clipboard.writeText(text); ta.hidden = true; toast('コピーしました。Excelやスプレッドシートに貼り付けできます'); }
+    catch { ta.hidden = false; ta.value = text; ta.select(); toast('下の枠を選択してコピーしてください'); }
+  });
+
+  document.addEventListener('click', async e => {
+    const el = e.target.closest('button'); if (!el) return;
+    const ds = el.dataset;
+    if (ds.recEdit) recordModal(A.records.get(ds.recEdit));
+    else if (ds.recDel) armDelete(el, async () => { const r = await run(sb.from('records').delete().eq('id', ds.recDel), '勤務記録を削除しました'); if (r.ok) { A.records.delete(ds.recDel); render(); } });
+    else if (ds.shiftDel) armDelete(el, async () => { const r = await run(sb.from('shifts').delete().eq('id', ds.shiftDel), 'シフトを削除しました'); if (r.ok) { A.shifts.delete(ds.shiftDel); render(); } });
+    else if (ds.noteDel) armDelete(el, async () => { const r = await run(sb.from('notes').delete().eq('id', ds.noteDel), '記録を削除しました'); if (r.ok) { await loadNotes(); renderCare(); } });
+    else if (ds.reqOk) {
+      el.disabled = true;
+      const q = A.requests.find(x => x.id === ds.reqOk);
+      const r = await run(sb.rpc('approve_request', { p_id: ds.reqOk }), '承認して勤務記録に反映しました');
+      if (r.ok) { await loadBase(); if (q) await loadMonth(q.work_date.slice(0, 7), true); render(); }
+      el.disabled = false;
+    }
+    else if (ds.reqNg) {
+      const id = ds.reqNg;
+      openModal('依頼を却下', '<label class="f">スタッフへのコメント（任意）<textarea name="c" placeholder="例）タイムカードと時刻が合わないため、一度声をかけてください"></textarea></label>', '却下する', async f => {
+        const r = await run(sb.from('requests').update({ status: 'rejected', admin_comment: (f.c || '').trim() || null, decided_at: new Date().toISOString() }).eq('id', id), '却下しました');
+        if (r.ok) { await loadBase(); render(); }
+        return r.ok;
+      });
+    }
+    else if (ds.staffEdit) {
+      const s = staffById(ds.staffEdit); if (!s) return;
+      openModal('スタッフを編集', `<label class="f">名前<input name="name" required value="${esc(s.name)}"></label><div class="grid2"><label class="f">時給（円）<input type="number" name="wage" min="0" value="${esc(s.wage)}"></label><label class="f">交通費（円/日）<input type="number" name="transport" min="0" value="${esc(s.transport)}"></label></div><label class="f">在籍<select name="active"><option value="1"${s.active ? ' selected' : ''}>在籍中</option><option value="0"${s.active ? '' : ' selected'}>退職（シフトの候補から外す）</option></select></label>`, '保存', async f => {
+        const r = await run(sb.from('staff').update({ name: f.name.trim(), wage: Number(f.wage) || 0, transport: Number(f.transport) || 0, active: f.active === '1' }).eq('id', s.id), '保存しました');
+        if (r.ok) { await loadBase(); render(); }
+        return r.ok;
+      });
+    }
+    else if (ds.accSave) {
+      const id = ds.accSave, staff_id = $(`[data-acc-staff="${id}"]`).value || null, role = $(`[data-acc-role="${id}"]`).value;
+      if (id === A.uid && role !== 'admin') { toast('自分自身の管理者権限は外せません。別の管理者に頼んでください', 'bad'); return; }
+      const r = await run(sb.from('profiles').update({ staff_id, role }).eq('id', id), '保存しました');
+      if (r.ok) { await loadBase(); render(); }
+    }
+  });
+
+  setInterval(async () => { if (A.me && A.me.role === 'admin' && !document.hidden) { const t = today(); await Promise.all([loadRecordsRange(addDays(t, -1), t), loadOpenRecords()]); render(); } }, 60000);
+
+  bootAuth({ signup: true, subtitle: '管理者用（はじめて使うときは、オーナーが最初にアカウント登録してください）', onSession: async session => {
+    A.uid = session.user.id;
+    $('#auth').hidden = true; $('#app').hidden = false; $('#who').hidden = false;
+    const { data, error } = await sb.from('profiles').select('*').eq('id', A.uid).maybeSingle();
+    if (error) { toast(errText(error), 'bad'); return; }
+    A.me = data;
+    $('#who-name').textContent = (data && data.display_name) || session.user.email;
+    if (!data || data.role !== 'admin') { $('#notadmin').hidden = false; return; }
+    $('#adm').hidden = false;
+    await reloadAll();
+  } });
+});
+</script>
+</body>
+</html>

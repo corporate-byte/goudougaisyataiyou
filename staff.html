@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e6a5a">
+<title>ケアタイム勤怠</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="wrap narrow">
+  <header class="top">
+    <div class="brand"><div class="brand-mark">ケ</div><h1>ケアタイム勤怠</h1></div>
+    <div class="who" id="who" hidden><span id="who-name"></span><button class="btn sm" type="button" id="logout">ログアウト</button></div>
+  </header>
+
+  <div id="auth" class="auth" hidden></div>
+
+  <main id="app" hidden>
+    <div id="pending" class="card stack" hidden>
+      <h2>管理者の確認待ちです</h2>
+      <p style="margin:0">アカウント登録ができました。管理者があなたのアカウントをスタッフ名と紐付けると、出勤・退勤ができるようになります。</p>
+      <p class="muted small" style="margin:0">登録名：<strong id="pending-name"></strong>　メール：<span id="pending-email"></span></p>
+      <button class="btn" type="button" id="pending-reload" style="align-self:flex-start">もう一度確認する</button>
+    </div>
+
+    <div id="main" class="stack" hidden>
+      <div class="card punch">
+        <div class="date" id="st-date"></div>
+        <div class="clock num" id="st-clock">--:--</div>
+        <div id="st-status"></div>
+        <div id="st-shift"></div>
+        <div id="st-breakbox" hidden style="margin-top:12px;text-align:left">
+          <label class="f">休憩時間（分）<input type="number" id="st-break" min="0" max="600" step="5" inputmode="numeric"></label>
+        </div>
+        <button class="bigbtn in" id="st-punch" type="button">出勤する</button>
+      </div>
+
+      <div>
+        <div class="tabs" role="tablist" id="st-tabs">
+          <button role="tab" data-tab="shift" aria-selected="true">シフト予定</button>
+          <button role="tab" data-tab="hist" aria-selected="false">勤務履歴</button>
+          <button role="tab" data-tab="care" aria-selected="false">ケア記録</button>
+          <button role="tab" data-tab="req" aria-selected="false">修正依頼</button>
+        </div>
+
+        <div data-panel="shift" class="card"><div id="st-shifts" class="list"></div></div>
+
+        <div data-panel="hist" hidden class="stack">
+          <div class="row" style="justify-content:space-between">
+            <label class="f">月<input type="month" id="st-month"></label>
+            <button class="btn" type="button" id="req-new">打刻漏れを申請</button>
+          </div>
+          <div id="st-sum" class="kpis"></div>
+          <div class="card"><div id="st-hist" class="list"></div></div>
+        </div>
+
+        <div data-panel="care" hidden class="stack">
+          <form class="card stack" id="care-form">
+            <h3>様子を記録する</h3>
+            <label class="f">利用者さん<input id="care-res" list="res-dl" placeholder="名前を選ぶか入力" required></label>
+            <div class="chips" id="care-cats"></div>
+            <label class="f">内容<textarea id="care-text" placeholder="例）昼食8割摂取。午後は居室でテレビ。表情穏やか。" required></textarea></label>
+            <button class="btn primary" type="submit">記録する</button>
+          </form>
+          <div class="card">
+            <div class="panel-head"><h3>最近の記録（3日分）</h3><label class="f" style="width:180px">利用者さんで絞る<input id="care-filter" list="res-dl" placeholder="すべて"></label></div>
+            <div id="care-list"></div>
+          </div>
+        </div>
+
+        <div data-panel="req" hidden class="stack">
+          <p class="muted small" style="margin:0">打刻を忘れた日や時刻がずれた日は、勤務履歴の「修正依頼」か「打刻漏れを申請」から出せます。管理者が承認すると勤務記録に反映されます。</p>
+          <div class="card"><div id="st-reqs" class="list"></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<datalist id="res-dl"></datalist>
+<div id="modal" hidden>
+  <form class="card stack" id="m-form">
+    <h2 id="m-title"></h2>
+    <div id="m-body" class="stack"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn" type="button" id="m-cancel">キャンセル</button><button class="btn primary" type="submit" id="m-ok">送信</button></div>
+  </form>
+</div>
+<div id="toast" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+'use strict';
+const S = { uid: null, profile: null, staffName: '', names: {}, settings: { residents: [], ot_hours: 8 }, shifts: [], records: [], requests: [], notes: [] };
+
+async function loadProfile() {
+  const { data, error } = await sb.from('profiles').select('*').eq('id', S.uid).maybeSingle();
+  if (error) { toast(errText(error), 'bad'); return null; }
+  return data;
+}
+async function start(session) {
+  S.uid = session.user.id;
+  $('#auth').hidden = true; $('#app').hidden = false; $('#who').hidden = false;
+  S.profile = await loadProfile();
+  if (!S.profile) { toast('プロフィールが見つかりません。管理者に連絡してください', 'bad'); return; }
+  $('#who-name').textContent = S.profile.display_name || session.user.email;
+  if (!S.profile.staff_id) {
+    $('#pending').hidden = false; $('#main').hidden = true;
+    $('#pending-name').textContent = S.profile.display_name || '（未入力）';
+    $('#pending-email').textContent = S.profile.email || '';
+    return;
+  }
+  $('#pending').hidden = true; $('#main').hidden = false;
+  await loadAll();
+}
+async function loadAll() {
+  const sid = S.profile.staff_id, from = addDays(today(), -100);
+  const [dir, st, sh, rec, req, nt] = await Promise.all([
+    sb.rpc('staff_directory'),
+    sb.from('settings').select('*').eq('id', 1).maybeSingle(),
+    sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', addDays(today(), -1)).order('work_date').order('start_time').limit(200),
+    sb.from('records').select('*').eq('staff_id', sid).gte('work_date', from).order('in_at', { ascending: false }).limit(500),
+    sb.from('requests').select('*').eq('user_id', S.uid).order('created_at', { ascending: false }).limit(100),
+    sb.from('notes').select('*').gte('created_at', new Date(Date.now() - 3 * 864e5).toISOString()).order('created_at', { ascending: false }).limit(300),
+  ]);
+  const firstErr = [dir, st, sh, rec, req, nt].find(r => r.error);
+  if (firstErr) toast(errText(firstErr.error), 'bad');
+  S.names = Object.fromEntries((dir.data || []).map(x => [x.id, x.name]));
+  if (st.data) S.settings = st.data;
+  S.shifts = (sh.data || []).map(normShift);
+  S.records = (rec.data || []).map(normRecord);
+  S.requests = req.data || [];
+  S.notes = nt.data || [];
+  render();
+}
+
+/* ---------- 描画 ---------- */
+const openRecord = () => S.records.filter(r => !r.outAt).sort((a, b) => b.inAt - a.inAt)[0];
+function renderPunch() {
+  const now = Date.now(), d = new Date(now), t = today();
+  $('#st-date').textContent = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）`;
+  $('#st-clock').textContent = hm(now);
+  const open = openRecord(), btn = $('#st-punch');
+  if (open) {
+    const el = (now - open.inAt) / 6e4;
+    $('#st-status').innerHTML = `<span class="status on">勤務中 ${hm(open.inAt)}〜（${hhmm(el)}経過）</span>`;
+    btn.textContent = '退勤する'; btn.className = 'bigbtn out';
+    $('#st-breakbox').hidden = false;
+    const bb = $('#st-break'); if (!bb.dataset.touched) bb.value = suggestBreak(el);
+  } else {
+    const done = S.records.find(r => r.date === t && r.outAt);
+    $('#st-status').innerHTML = `<span class="status off">${done ? `本日は ${hm(done.inAt)}〜${hm(done.outAt)} で退勤済み` : '未出勤'}</span>`;
+    btn.textContent = '出勤する'; btn.className = 'bigbtn in';
+    $('#st-breakbox').hidden = true; $('#st-break').dataset.touched = '';
+  }
+  const sh = S.shifts.filter(s => s.date === t || (s.date === addDays(t, -1) && shiftSpan(s)[1] > now));
+  $('#st-shift').innerHTML = `<div class="shiftline">${sh.length ? '今日のシフト：' + sh.map(s => `<strong class="num">${esc(s.start)}〜${esc(s.end)}</strong>${s.memo ? `（${esc(s.memo)}）` : ''}`).join('、') : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
+}
+function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
+function render() {
+  $('#res-dl').innerHTML = (S.settings.residents || []).map(r => `<option value="${esc(r)}">`).join('');
+  renderPunch();
+  const t = today(), now = Date.now();
+  const up = S.shifts.filter(s => s.date >= t || shiftSpan(s)[1] > now);
+  $('#st-shifts').innerHTML = up.length ? up.slice(0, 40).map(s => `<div class="li"><div class="daycol">${fmtDate(s.date)}${s.date === t ? ' <span class="tag">今日</span>' : ''}</div><div style="flex:1"><span class="num">${esc(s.start)} 〜 ${esc(s.end)}</span>${s.end <= s.start ? ' <span class="pill info">翌日まで</span>' : ''}${s.memo ? `<div class="muted small">${esc(s.memo)}</div>` : ''}</div></div>`).join('') : '<div class="empty">これからのシフトはまだ入っていません</div>';
+
+  const m = $('#st-month').value;
+  const recs = S.records.filter(r => r.date.startsWith(m)).sort((a, b) => b.inAt - a.inAt);
+  let tw = 0; const days = new Set();
+  recs.forEach(r => { const c = calc(r, S.settings); if (c) { tw += c.work; days.add(r.date); } });
+  $('#st-sum').innerHTML = `<div class="kpi"><b class="num">${days.size}日</b><span>出勤日数</span></div><div class="kpi"><b class="num">${hhmm(tw)}</b><span>実働時間</span></div>`;
+  $('#st-hist').innerHTML = recs.length ? recs.map(r => {
+    const c = calc(r, S.settings), pend = S.requests.some(q => q.record_id === r.id && q.status === 'pending');
+    return `<div class="li"><div class="daycol">${fmtDate(r.date)}</div><div style="flex:1"><span class="num">${hm(r.inAt)} 〜 ${r.outAt ? hm(r.outAt) : '<span class="pill good">勤務中</span>'}</span><div class="muted small num">休憩 ${r.breakMin}分${c ? ` ・ 実働 ${hhmm(c.work)}` : ''}${r.edited ? ' ・ 管理者が修正' : ''}</div></div>
+      ${pend ? '<span class="pill warn">依頼中</span>' : `<button class="btn sm" type="button" data-req="${r.id}">修正依頼</button>`}</div>`;
+  }).join('') : '<div class="empty">この月の勤務記録はありません</div>';
+
+  $('#st-reqs').innerHTML = S.requests.length ? S.requests.map(q => `<div class="li"><div style="flex:1"><strong>${fmtDate(q.work_date)}</strong> <span class="num">${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}</span> <span class="muted small">休憩${q.break_min}分</span><div class="muted small">${q.record_id ? '時刻の修正' : '打刻漏れ'}：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small">管理者より：${esc(q.admin_comment)}</div>` : ''}</div>${reqPill(q.status)}</div>`).join('') : '<div class="empty">修正依頼はまだありません</div>';
+  renderCare();
+}
+function renderCare() {
+  const f = $('#care-filter').value.trim();
+  const list = S.notes.filter(n => !f || n.resident.includes(f));
+  $('#care-list').innerHTML = list.length ? list.map(n => `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${fmtDate(dk(Date.parse(n.created_at)))} ${hm(Date.parse(n.created_at))}</span><span class="muted">記録：${esc(S.names[n.staff_id] || '—')}</span>${n.user_id === S.uid ? `<button class="btn sm danger" type="button" data-del-note="${n.id}" style="margin-left:auto">削除</button>` : ''}</div><p>${esc(n.body)}</p></div>`).join('') : '<div class="empty">該当する記録はありません</div>';
+}
+
+/* ---------- 操作 ---------- */
+function requestForm(rec) {
+  const v = rec ? { date: rec.date, inTime: hm(rec.inAt), outTime: rec.outAt ? hm(rec.outAt) : '', breakMin: rec.breakMin } : {};
+  openModal(rec ? '勤務時間の修正依頼' : '打刻漏れの申請', timeForm(v) + `<label class="f">理由<textarea name="reason" required placeholder="例）退勤ボタンを押し忘れました"></textarea></label>`, '依頼を送る', async f => {
+    if (!f.outTime) { toast('退勤時刻を入れてください', 'bad'); return false; }
+    const r = await run(sb.from('requests').insert({ staff_id: S.profile.staff_id, user_id: S.uid, record_id: rec ? rec.id : null, work_date: f.date, in_time: f.inTime, out_time: f.outTime, break_min: parseInt(f.breakMin, 10) || 0, reason: f.reason.trim() }), '修正依頼を送りました');
+    if (r.ok) loadAll();
+    return r.ok;
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  $('#st-month').value = today().slice(0, 7);
+  setupTabs('#st-tabs', 'ct-st-tab');
+  $('#care-cats').innerHTML = CATS.map(c => `<button type="button" class="chip" aria-pressed="false" data-cat="${c}">${c}</button>`).join('');
+  $('#care-cats').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); });
+  $('#care-filter').addEventListener('input', renderCare);
+  $('#st-month').addEventListener('input', render);
+  $('#st-break').addEventListener('input', e => { e.target.dataset.touched = '1'; });
+  $('#logout').addEventListener('click', signOut);
+  $('#pending-reload').addEventListener('click', async () => { const { data } = await sb.auth.getSession(); if (data.session) start(data.session); });
+  $('#req-new').addEventListener('click', () => requestForm(null));
+
+  $('#st-punch').addEventListener('click', async e => {
+    const btn = e.currentTarget; if (btn.disabled) return; btn.disabled = true;
+    const r = openRecord()
+      ? await run(sb.rpc('clock_out', { p_break: Math.max(0, parseInt($('#st-break').value, 10) || 0) }), 'お疲れさまでした。退勤を記録しました')
+      : await run(sb.rpc('clock_in'), '出勤を記録しました');
+    btn.disabled = false;
+    await loadAll();
+  });
+
+  $('#care-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const resident = $('#care-res').value.trim(), body = $('#care-text').value.trim();
+    if (!resident || !body) return;
+    const cats = $$('#care-cats .chip[aria-pressed="true"]').map(b => b.dataset.cat);
+    const r = await run(sb.from('notes').insert({ staff_id: S.profile.staff_id, user_id: S.uid, resident, cats, body }), '記録しました');
+    if (r.ok) { $('#care-text').value = ''; $$('#care-cats .chip').forEach(b => b.setAttribute('aria-pressed', 'false')); loadAll(); }
+  });
+
+  document.addEventListener('click', async e => {
+    const rq = e.target.closest('[data-req]');
+    if (rq) requestForm(S.records.find(r => r.id === rq.dataset.req));
+    const dn = e.target.closest('[data-del-note]');
+    if (dn) armDelete(dn, async () => { const r = await run(sb.from('notes').delete().eq('id', dn.dataset.delNote), '記録を削除しました'); if (r.ok) loadAll(); });
+  });
+
+  setInterval(() => { if (S.profile && S.profile.staff_id) renderPunch(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.profile && S.profile.staff_id) loadAll(); });
+
+  bootAuth({ signup: true, subtitle: 'スタッフ用', onSession: start });
+});
+</script>
+</body>
+</html>
