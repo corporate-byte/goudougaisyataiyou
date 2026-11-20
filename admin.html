@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611191624">
+<link rel="stylesheet" href="common.css?v=202611201312">
 </head>
 <body>
 <div class="wrap">
@@ -87,6 +87,7 @@
               <button class="btn sm" type="button" data-days="1,3">火木</button>
               <button class="btn sm" type="button" data-days="0,1,2,3,4,5,6">毎日</button>
               <button class="btn sm" type="button" data-days="">クリア</button>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:500;margin-left:6px"><input type="checkbox" id="sh-noholiday" checked style="width:auto;transform:scale(1.15)"> 祝日を除く</label>
             </div>
           </div>
           <div class="row">
@@ -181,8 +182,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611191624"></script>
-<script src="common.js?v=202611191624"></script>
+<script src="config.js?v=202611201312"></script>
+<script src="common.js?v=202611201312"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -369,7 +370,7 @@ function renderShifts(shifts) {
   const days = [...Array(7)].map((_, i) => addDays(A.weekStart, i));
   $('#wk-label').textContent = `${fmtDate(days[0])} 〜 ${fmtDate(days[6])}`;
   const t = today(), week = shifts.filter(s => s.date >= days[0] && s.date <= days[6]);
-  $('#sh-head').innerHTML = `<tr><th>利用者さん</th>${days.map(d => `<th class="${d === t ? 'today' : ''}">${fmtDate(d)}</th>`).join('')}</tr>`;
+  $('#sh-head').innerHTML = `<tr><th>利用者さん</th>${days.map(d => { const hn = holidayName(d); return `<th class="${d === t ? 'today' : ''}"${hn ? ' style="color:var(--bad)"' : ''}>${fmtDate(d)}${hn ? `<br><span style="font-size:.72rem">${esc(hn)}</span>` : ''}</th>`; }).join('')}</tr>`;
   /* 行：今週シフトのある利用者さん（登録順）＋登録外の名前 */
   const order = A.visits.map(v => v.name);
   const names = [...new Set(week.map(s => s.visit || '（利用者さん未設定）'))].sort((a, b) => { const ia = order.indexOf(a), ib = order.indexOf(b); return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib) || a.localeCompare(b); });
@@ -403,16 +404,24 @@ function shiftModal(s) {
 }
 async function reloadShiftsView() { await loadShifts(addDays(A.weekStart, -1), addDays(A.weekStart, 7)); await loadShifts(today(), today()); render(); }
 /* 曜日と期間から日付の一覧を作る */
-function shiftDates() {
-  const from = $('#sh-from').value, to = $('#sh-to').value;
+/* 祝日を除く場合、除いた日は skipped に入る */
+function shiftDates(skipped) {
+  const from = $('#sh-from').value, to = $('#sh-to').value, noHoliday = $('#sh-noholiday').checked;
   const picked = $$('#sh-days .chip[aria-pressed="true"]').map(b => jsDay(Number(b.dataset.i)));
   if (!from || !to || to < from || !picked.length) return [];
-  const out = []; for (let d = from; d <= to && out.length <= 400; d = addDays(d, 1)) { const [y, m, dd] = d.split('-').map(Number); if (picked.includes(new Date(y, m - 1, dd).getDay())) out.push(d); }
+  const out = [];
+  for (let d = from; d <= to && out.length <= 400; d = addDays(d, 1)) {
+    const [y, m, dd] = d.split('-').map(Number);
+    if (!picked.includes(new Date(y, m - 1, dd).getDay())) continue;
+    if (noHoliday && holidayName(d)) { if (skipped) skipped.push(d); continue; }
+    out.push(d);
+  }
   return out;
 }
 function updateShiftPreview() {
-  const n = shiftDates().length;
-  $('#sh-preview').textContent = n ? `${n}件のシフトを作ります。終了が開始より早い時刻なら、翌日終了（夜勤）として扱います。` : '曜日と期間を選ぶと、何件作るかがここに出ます。';
+  const skipped = [], n = shiftDates(skipped).length;
+  const skipText = skipped.length ? `祝日の${skipped.length}日（${skipped.map(d => `${fmtDate(d)} ${holidayName(d)}`).join('、')}）は除きます。` : '';
+  $('#sh-preview').textContent = n ? `${n}件のシフトを作ります。${skipText}終了が開始より早い時刻なら、翌日終了（夜勤）として扱います。` : (skipText || '曜日と期間を選ぶと、何件作るかがここに出ます。');
   $('#sh-submit').textContent = n ? `${n}件まとめて追加` : 'まとめて追加';
 }
 function renderStaff() {
@@ -474,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const on = b.dataset.days ? b.dataset.days.split(',') : [];
     $$('#sh-days .chip').forEach(c => c.setAttribute('aria-pressed', String(on.includes(c.dataset.i)))); updateShiftPreview();
   }));
-  ['#sh-from', '#sh-to'].forEach(s => $(s).addEventListener('input', updateShiftPreview));
+  ['#sh-from', '#sh-to', '#sh-noholiday'].forEach(s => $(s).addEventListener('input', updateShiftPreview)); $('#sh-noholiday').addEventListener('change', updateShiftPreview);
   $('#sh-from').value = today(); $('#sh-to').value = addDays(today(), 27); updateShiftPreview();
   $('#shift-form').addEventListener('submit', async e => {
     e.preventDefault();

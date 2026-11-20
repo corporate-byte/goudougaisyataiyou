@@ -35,6 +35,34 @@ const STAFF_COLORS = [
   ['赤', '#d93b3b'], ['青', '#2f6fdb'], ['緑', '#23963f'], ['オレンジ', '#e0700f'], ['紫', '#8d4fd8'],
   ['ピンク', '#d8418c'], ['水色', '#1497b3'], ['茶', '#9a6634'], ['黄緑', '#6f9a12'], ['グレー', '#7b8580'],
 ];
+/* ---------- 日本の祝日（祝日法のルールから計算。2027年以降も自動） ---------- */
+const _holidayCache = {};
+function jpHolidays(y) {
+  if (_holidayCache[y]) return _holidayCache[y];
+  const h = new Map(), k = (m, d) => `${y}-${pad(m)}-${pad(d)}`;
+  const nthMonday = (m, n) => { const first = new Date(y, m - 1, 1).getDay(); return 1 + ((8 - first) % 7) + (n - 1) * 7; };
+  const fixed = [[1, 1, '元日'], [2, 11, '建国記念の日'], [2, 23, '天皇誕生日'], [4, 29, '昭和の日'], [5, 3, '憲法記念日'], [5, 4, 'みどりの日'], [5, 5, 'こどもの日'], [8, 11, '山の日'], [11, 3, '文化の日'], [11, 23, '勤労感謝の日']];
+  fixed.forEach(([m, d, n]) => h.set(k(m, d), n));
+  h.set(k(1, nthMonday(1, 2)), '成人の日'); h.set(k(7, nthMonday(7, 3)), '海の日');
+  h.set(k(9, nthMonday(9, 3)), '敬老の日'); h.set(k(10, nthMonday(10, 2)), 'スポーツの日');
+  const e = y - 1980, leap = Math.floor(e / 4);
+  h.set(k(3, Math.floor(20.8431 + 0.242194 * e - leap)), '春分の日');
+  h.set(k(9, Math.floor(23.2488 + 0.242194 * e - leap)), '秋分の日');
+  /* 国民の休日：前後が祝日にはさまれた平日 */
+  for (let d = new Date(y, 0, 2); d.getFullYear() === y; d.setDate(d.getDate() + 1)) {
+    const key = dk(d.getTime());
+    if (!h.has(key) && d.getDay() !== 0 && h.has(addDays(key, -1)) && h.has(addDays(key, 1))) h.set(key, '国民の休日');
+  }
+  /* 振替休日：日曜の祝日のあと、最初の祝日でない日 */
+  [...h.keys()].sort().forEach(key => {
+    const [yy, mm, dd] = key.split('-').map(Number);
+    if (new Date(yy, mm - 1, dd).getDay() !== 0) return;
+    let n = addDays(key, 1); while (h.has(n)) n = addDays(n, 1);
+    if (n.startsWith(String(y))) h.set(n, '振替休日');
+  });
+  return (_holidayCache[y] = h);
+}
+const holidayName = key => jpHolidays(Number(key.slice(0, 4))).get(key) || '';
 const WEEK = ['月', '火', '水', '木', '金', '土', '日'];   // 表示順（月曜はじまり）
 const jsDay = i => (i + 1) % 7;                              // WEEK の位置 → Date#getDay()
 
