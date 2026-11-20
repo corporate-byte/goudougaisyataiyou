@@ -129,6 +129,7 @@ tfoot td{font-weight:700;background:var(--sunk)}
 .cal-chip>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-chip b{font-size:.8rem}
 .cal-v{color:var(--muted)}
+.v-short{display:none}
 /* 管理画面のカレンダーもスマホでは画面幅に収める */
 @media (max-width:700px){
   .cal{min-width:0}
@@ -138,6 +139,8 @@ tfoot td{font-weight:700;background:var(--sunk)}
   .cal-chip b{font-size:.68rem}
   .cal-hol{display:none}
   .cal-end{display:none}
+  .v-full{display:none}
+  .v-short{display:inline}
 }
 /* スタッフ画面のカレンダー：スマホ幅に収める */
 .st-cal{min-width:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
