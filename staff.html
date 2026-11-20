@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201320">
+<link rel="stylesheet" href="common.css?v=202611201321">
 </head>
 <body>
 <div class="wrap narrow">
@@ -118,8 +118,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201320"></script>
-<script src="common.js?v=202611201320"></script>
+<script src="config.js?v=202611201321"></script>
+<script src="common.js?v=202611201321"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -212,7 +212,7 @@ function renderMonth() {
     const hn = holidayName(d), dow = (new Date(at(d, '00:00')).getDay() + 6) % 7;
     const ss = S.calShifts.filter(s => s.date === d);
     const cls = ['cal-d', d.startsWith(S.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 6 ? 'sun' : dow === 5 ? 'sat' : ''].join(' ');
-    html += `<div class="${cls}"${hn ? ` title="${esc(hn)}"` : ''}><div class="cal-n"><span class="num">${Number(d.slice(8))}</span>${hn ? '<span class="cal-hol">祝</span>' : ''}</div>${ss.map(s => `<div class="cal-chip" style="border-left-color:var(--accent);cursor:default"><span class="num">${esc(s.start)}</span><b>${esc(s.visit || '—')}</b></div>`).join('')}</div>`;
+    html += `<div class="${cls}"${hn ? ` title="${esc(hn)}"` : ''}><div class="cal-n"><span class="num">${Number(d.slice(8))}</span>${hn ? '<span class="cal-hol">祝</span>' : ''}</div>${ss.map(s => `<button type="button" class="cal-chip" style="border-left-color:var(--accent)" data-detail="${esc(`${fmtDate(s.date)} ${s.start}〜${s.end} ${s.visit || ''}${s.memo ? '（' + s.memo + '）' : ''}`)}"><span class="num">${esc(s.start)}</span><b>${esc((s.visit || '—').split(/[\s　(（]/)[0])}</b></button>`).join('')}</div>`;
   }
   $('#st-cal').innerHTML = html;
 }
@@ -332,6 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (S.shiftView === 'month') loadMonthShifts();
   }));
   const stMove = n => { const [y, m] = S.calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1); S.calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; loadMonthShifts(); };
+  $('#st-cal').addEventListener('click', e => { const c = e.target.closest('[data-detail]'); if (c) toast(c.dataset.detail); });
   $('#st-cal-prev').addEventListener('click', () => stMove(-1)); $('#st-cal-next').addEventListener('click', () => stMove(1));
   $('#preview-staff').addEventListener('change', async e => {
     S.preview = e.target.value; $('#st-visit').value = ''; $('#st-memo').value = ''; await loadAll();
