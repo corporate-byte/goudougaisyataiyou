@@ -68,17 +68,25 @@ const jsDay = i => (i + 1) % 7;                              // WEEK の位置 �
 
 /* ---------- 計算 ---------- */
 function shiftSpan(s) { const a = at(s.date, s.start); let b = at(s.date, s.end); if (b <= a) b += 864e5; return [a, b]; }
-function nightOverlap(a, b) {
+/* 夜間（割増）の時間帯と重なる分数。開始＞終了なら日をまたぐ（例 20:00〜翌8:00） */
+function nightOverlap(a, b, cfg) {
+  const ns = (cfg && cfg.night_start) || '22:00', ne = (cfg && cfg.night_end) || '05:00';
+  if (ns === ne) return 0;
+  const cross = ne <= ns;
   let t = 0, d = addDays(dk(a), -1); const end = dk(b);
-  while (d <= end) { const s = at(d, '22:00'), e = at(addDays(d, 1), '05:00'); t += Math.max(0, Math.min(b, e) - Math.max(a, s)); d = addDays(d, 1); }
+  while (d <= end) {
+    const s = at(d, ns), e = at(cross ? addDays(d, 1) : d, ne);
+    t += Math.max(0, Math.min(b, e) - Math.max(a, s)); d = addDays(d, 1);
+  }
   return t / 6e4;
 }
+const nightLabel = cfg => `${(cfg && cfg.night_start) || '22:00'}〜${((cfg && cfg.night_end) || '05:00') <= ((cfg && cfg.night_start) || '22:00') ? '翌' : ''}${(cfg && cfg.night_end) || '05:00'}`;
 /* 1件の勤務 → 実働・深夜・残業（分） */
 function calc(r, cfg) {
   if (!r.outAt) return null;
   const span = (r.outAt - r.inAt) / 6e4;
   const work = Math.max(0, Math.round(span - (r.breakMin || 0)));
-  const night = span > 0 ? Math.round(nightOverlap(r.inAt, r.outAt) * work / span) : 0;
+  const night = span > 0 ? Math.round(nightOverlap(r.inAt, r.outAt, cfg) * work / span) : 0;
   const ot = Math.max(0, work - Math.round(((cfg && cfg.ot_hours) || 8) * 60));
   return { work, night, ot };
 }

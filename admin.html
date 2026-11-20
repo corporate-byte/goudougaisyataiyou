@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201321">
+<link rel="stylesheet" href="common.css?v=202611201344">
 </head>
 <body>
 <div class="wrap">
@@ -51,7 +51,7 @@
           </div>
           <button class="btn" type="button" id="rec-add">勤務記録を手で追加</button>
         </div>
-        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>訪問先</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">深夜</th><th>情報共有事項</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>訪問先</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">夜間</th><th>情報共有事項</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
       </div>
 
       <div data-panel="reqs" hidden class="stack">
@@ -65,7 +65,7 @@
           <button class="btn" type="button" id="pay-copy">表をコピー（Excel貼り付け用）</button>
         </div>
         <div id="ad-pay-kpi" class="kpis"></div>
-        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th class="r">時給</th><th class="r">日数</th><th class="r">実働</th><th class="r">深夜</th><th class="r">残業</th><th class="r">基本給</th><th class="r">深夜手当</th><th class="r">残業手当</th><th class="r">交通費</th><th class="r">支給額</th></tr></thead><tbody id="ad-pay"></tbody><tfoot id="ad-pay-foot"></tfoot></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th class="r">時給</th><th class="r">日数</th><th class="r">実働</th><th class="r">夜間</th><th class="r">残業</th><th class="r">基本給</th><th class="r">夜間手当</th><th class="r">残業手当</th><th class="r">交通費</th><th class="r">支給額</th></tr></thead><tbody id="ad-pay"></tbody><tfoot id="ad-pay-foot"></tfoot></table></div>
         <p class="muted small" id="ad-pay-note"></p>
         <textarea id="ad-pay-csv" hidden readonly></textarea>
       </div>
@@ -173,7 +173,9 @@
         <form class="card stack" id="cfg-form" style="max-width:640px">
           <h3>給与計算のルール</h3>
           <div class="grid2">
-            <label class="f">深夜割増（22時〜5時）%<input type="number" id="cfg-night" min="0" step="1"></label>
+            <label class="f">夜間支援の開始<input type="time" id="cfg-nstart" required></label>
+            <label class="f">夜間支援の終了（開始より早ければ翌日）<input type="time" id="cfg-nend" required></label>
+            <label class="f">夜間支援の割増 %（25＝時給×1.25）<input type="number" id="cfg-night" min="0" step="1"></label>
             <label class="f">残業割増 %<input type="number" id="cfg-ot" min="0" step="1"></label>
             <label class="f">1日の所定（時間）<input type="number" id="cfg-otmin" min="1" step="0.5"></label>
             <label class="f">同行のときの時給 %（100＝通常どおり）<input type="number" id="cfg-acc" min="0" step="1"></label>
@@ -196,8 +198,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201321"></script>
-<script src="common.js?v=202611201321"></script>
+<script src="config.js?v=202611201344"></script>
+<script src="common.js?v=202611201344"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -264,7 +266,7 @@ async function loadBase() {
   A.staff = st.data || []; A.profiles = pf.data || []; A.requests = rq.data || [];
   A.services = sv.data || []; A.visits = vs.data || [];
   if (cfg.data) A.settings = cfg.data;
-  $('#cfg-night').value = A.settings.night_rate; $('#cfg-ot').value = A.settings.ot_rate; $('#cfg-otmin').value = A.settings.ot_hours; $('#cfg-acc').value = A.settings.accompany_pct ?? 100;
+  $('#cfg-night').value = A.settings.night_rate; $('#cfg-nstart').value = A.settings.night_start || '22:00'; $('#cfg-nend').value = A.settings.night_end || '05:00'; $('#cfg-ot').value = A.settings.ot_rate; $('#cfg-otmin').value = A.settings.ot_hours; $('#cfg-acc').value = A.settings.accompany_pct ?? 100;
 }
 async function loadRecordsRange(from, to) {
   try {
@@ -379,7 +381,7 @@ function renderPay(recs) {
   $('#ad-pay').innerHTML = P.length ? P.map(p => `<tr><td><strong>${esc(p.s.name)}</strong>${p.open ? ` <span class="pill warn">退勤なし${p.open}件</span>` : ''}</td><td class="r">${yen(p.s.wage)}</td><td class="r">${p.days}</td><td class="r">${hhmm(p.work)}</td><td class="r">${hhmm(p.night)}</td><td class="r">${hhmm(p.ot)}</td><td class="r">${yen(p.base)}</td><td class="r">${yen(p.nightP)}</td><td class="r">${yen(p.otP)}</td><td class="r">${yen(p.trans)}</td><td class="r"><strong>${yen(p.total)}</strong></td></tr>`).join('') : '<tr><td colspan="11" class="empty">スタッフを登録すると、ここに給与が計算されます</td></tr>';
   $('#ad-pay-foot').innerHTML = P.length ? `<tr><td>合計</td><td></td><td class="r">${sum('days')}</td><td class="r">${hhmm(sum('work'))}</td><td class="r">${hhmm(sum('night'))}</td><td class="r">${hhmm(sum('ot'))}</td><td class="r">${yen(sum('base'))}</td><td class="r">${yen(sum('nightP'))}</td><td class="r">${yen(sum('otP'))}</td><td class="r">${yen(sum('trans'))}</td><td class="r">${yen(sum('total'))}</td></tr>` : '';
   $('#ad-pay-kpi').innerHTML = `<div class="kpi"><b class="num">${yen(sum('total'))}</b><span>${m.replace('-', '年')}月の支給額合計</span></div><div class="kpi"><b class="num">${hhmm(sum('work'))}</b><span>総実働時間</span></div><div class="kpi"><b class="num">${P.filter(p => p.days).length}人</b><span>出勤したスタッフ</span></div>`;
-  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。時給は、訪問先のサービス種別に時給があればその額、なければスタッフの時給（表の「時給」列）。同行は時給の${c.accompany_pct ?? 100}%。深夜（22時〜5時）は${c.night_rate}%、1日の実働合計（訪問をまたいで合算）が${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
+  $('#ad-pay-note').textContent = `計算ルール：実働＝退勤−出勤−休憩。時給は、訪問先のサービス種別に時給があればその額、なければスタッフの時給（表の「時給」列）。同行は時給の${c.accompany_pct ?? 100}%。夜間支援（${nightLabel(c)}）は${c.night_rate}%、1日の実働合計（訪問をまたいで合算）が${c.ot_hours}時間を超えた分は${c.ot_rate}%を時給に上乗せ。交通費は出勤日数×1日額。退勤が記録されていない日は計算に入りません。社会保険・所得税を引く前の金額です。`;
 }
 function renderShifts(shifts) {
   const days = [...Array(7)].map((_, i) => addDays(A.weekStart, i));
@@ -575,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('#cfg-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const r = await run(sb.from('settings').update({ accompany_pct: Number($('#cfg-acc').value) || 0, night_rate: Number($('#cfg-night').value) || 0, ot_rate: Number($('#cfg-ot').value) || 0, ot_hours: Number($('#cfg-otmin').value) || 8 }).eq('id', 1), '設定を保存しました');
+    const r = await run(sb.from('settings').update({ accompany_pct: Number($('#cfg-acc').value) || 0, night_rate: Number($('#cfg-night').value) || 0, night_start: $('#cfg-nstart').value || '22:00', night_end: $('#cfg-nend').value || '05:00', ot_rate: Number($('#cfg-ot').value) || 0, ot_hours: Number($('#cfg-otmin').value) || 8 }).eq('id', 1), '設定を保存しました');
     if (r.ok) { await loadBase(); render(); }
   });
   $('#visit-form').addEventListener('submit', async e => {
@@ -597,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (r.ok) { await loadBase(); render(); }
   });
   $('#pay-copy').addEventListener('click', async () => {
-    const head = ['スタッフ', '時給', '日数', '実働', '深夜', '残業', '基本給', '深夜手当', '残業手当', '交通費', '支給額'];
+    const head = ['スタッフ', '時給', '日数', '実働', '夜間', '残業', '基本給', '夜間手当', '残業手当', '交通費', '支給額'];
     const text = [head, ...A.payRows.map(p => [p.s.name, p.s.wage, p.days, hhmm(p.work), hhmm(p.night), hhmm(p.ot), p.base, p.nightP, p.otP, p.trans, p.total])].map(r => r.join('\t')).join('\n');
     const ta = $('#ad-pay-csv');
     try { await navigator.clipboard.writeText(text); ta.hidden = true; toast('コピーしました。Excelやスプレッドシートに貼り付けできます'); }

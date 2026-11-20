@@ -396,3 +396,11 @@ alter table public.shifts add column visit text not null default '', add column 
 create index on public.shifts (series_id);
 create index on public.shifts (visit, work_date);
 alter table public.staff add column color text not null default '';
+
+-- =============================================================
+-- 追加：夜間支援の時間帯（設定で変更可）
+-- =============================================================
+alter table public.settings
+  add column night_start text not null default '22:00' check (night_start ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  add column night_end text not null default '05:00' check (night_end ~ '^[0-2][0-9]:[0-5][0-9]$');
+update public.settings set night_start = '20:00', night_end = '08:00', night_rate = 25 where id = 1;
