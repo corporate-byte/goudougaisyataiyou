@@ -127,8 +127,19 @@ async function run(promise, okMsg) {
 }
 function armDelete(btn, fn, label) {
   if (btn.classList.contains('armed')) { fn(); return; }
-  const t = btn.textContent; btn.classList.add('armed'); btn.textContent = label || '本当に削除';
-  setTimeout(() => { btn.classList.remove('armed'); btn.textContent = t; }, 3000);
+  const t = btn.textContent; btn.classList.add('armed'); btn.textContent = label || 'もう一度押すと削除';
+  setTimeout(() => { btn.classList.remove('armed'); btn.textContent = t; }, 5000);
+}
+/* 変更画面（モーダル）の中に「本当に削除しますか？」を出す。保存ボタンは隠す */
+function confirmInModal(message, onYes) {
+  const old = $('#m-confirm'); if (old) old.remove();
+  const box = document.createElement('div');
+  box.id = 'm-confirm'; box.className = 'banner bad stack'; box.style.margin = '0'; box.style.gap = '10px';
+  box.innerHTML = `<strong>${esc(message)}</strong><div class="row"><button type="button" class="btn" id="m-confirm-yes" style="background:var(--bad);border-color:var(--bad);color:var(--surface)">削除する</button><button type="button" class="btn" id="m-confirm-no">やめる</button></div>`;
+  $('#m-body').append(box); $('#m-ok').hidden = true;
+  box.scrollIntoView({ block: 'nearest' });
+  $('#m-confirm-no').addEventListener('click', () => { box.remove(); $('#m-ok').hidden = false; });
+  $('#m-confirm-yes').addEventListener('click', async e => { e.currentTarget.disabled = true; await onYes(); });
 }
 function fillSelect(el, opts, placeholder) {
   const html = (placeholder ? `<option value="">${esc(placeholder)}</option>` : '') + opts.map(o => `<option value="${esc(o.v)}"${o.disabled ? ' disabled' : ''}>${esc(o.t)}</option>`).join('');
@@ -148,11 +159,11 @@ function setupTabs(sel, key, onPick) {
 /* ---------- モーダル ---------- */
 let modalSubmit = null;
 function openModal(title, body, okText, onSubmit) {
-  $('#m-title').textContent = title; $('#m-body').innerHTML = body; $('#m-ok').textContent = okText || '保存';
+  $('#m-title').textContent = title; $('#m-body').innerHTML = body; $('#m-ok').textContent = okText || '保存'; $('#m-ok').hidden = false;
   modalSubmit = onSubmit; $('#modal').hidden = false;
   const f = $('#m-body').querySelector('input,select,textarea'); if (f) f.focus();
 }
-function closeModal() { $('#modal').hidden = true; modalSubmit = null; }
+function closeModal() { $('#modal').hidden = true; modalSubmit = null; $('#m-ok').hidden = false; }
 function timeForm(v, visits) {
   const vs = visits ? `<label class="f">訪問先<select name="visit" required><option value="">選んでください</option>${[...new Set([...(visits || []), ...(v.visit ? [v.visit] : [])])].map(x => `<option value="${esc(x)}"${x === v.visit ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
   <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="accompany" value="1" style="width:auto"${v.accompany ? ' checked' : ''}> 同行</label>` : '';

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201432">
+<link rel="stylesheet" href="common.css?v=202611201434">
 </head>
 <body>
 <div class="wrap">
@@ -198,8 +198,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201432"></script>
-<script src="common.js?v=202611201432"></script>
+<script src="config.js?v=202611201434"></script>
+<script src="common.js?v=202611201434"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -612,13 +612,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ds.recEdit) recordModal(A.records.get(ds.recEdit));
     else if (ds.recDel) armDelete(el, async () => { const r = await run(sb.from('records').delete().eq('id', ds.recDel), '勤務記録を削除しました'); if (r.ok) { A.records.delete(ds.recDel); render(); } });
     else if (ds.shiftOpen) { const s = A.shifts.get(ds.shiftOpen); if (s) shiftModal(s); }
-    else if (ds.shiftDelOne) armDelete(el, async () => { const r = await run(sb.from('shifts').delete().eq('id', ds.shiftDelOne), 'シフトを削除しました'); if (r.ok) { closeModal(); A.shifts.delete(ds.shiftDelOne); render(); } });
+    else if (ds.shiftDelOne) {
+      const s = A.shifts.get(ds.shiftDelOne); if (!s) return;
+      confirmInModal(`${fmtDate(s.date)} ${s.start}〜${s.end} ${s.visit || ''} のシフトを削除しますか？`, async () => {
+        const r = await run(sb.from('shifts').delete().eq('id', s.id).select('id'));
+        if (!r.ok) return;
+        if (!r.data || !r.data.length) { toast('削除できませんでした。画面を「最新にする」で開き直して、もう一度お試しください', 'bad'); return; }
+        toast('シフトを削除しました'); closeModal(); A.shifts.delete(s.id); render();
+      });
+    }
     else if (ds.shiftDelSeries) {
       const s = A.shifts.get(ds.shiftDelSeries); if (!s || !s.seriesId) return;
-      armDelete(el, async () => {
-        const r = await run(sb.from('shifts').delete().eq('series_id', s.seriesId).gte('work_date', s.date), `${fmtDate(s.date)} 以降の繰り返しシフトを削除しました`);
-        if (r.ok) { closeModal(); [...A.shifts.values()].forEach(x => { if (x.seriesId === s.seriesId && x.date >= s.date) A.shifts.delete(x.id); }); render(); }
-      }, 'この日以降を全部削除');
+      confirmInModal(`${s.visit || ''} の繰り返しシフトを、${fmtDate(s.date)} 以降すべて削除しますか？`, async () => {
+        const r = await run(sb.from('shifts').delete().eq('series_id', s.seriesId).gte('work_date', s.date).select('id'));
+        if (!r.ok) return;
+        const n = (r.data || []).length;
+        if (!n) { toast('削除できませんでした。画面を「最新にする」で開き直して、もう一度お試しください', 'bad'); return; }
+        toast(`${fmtDate(s.date)} 以降の繰り返しシフトを${n}件削除しました`); closeModal();
+        [...A.shifts.values()].forEach(x => { if (x.seriesId === s.seriesId && x.date >= s.date) A.shifts.delete(x.id); }); render();
+      });
     }
     else if (ds.noteDel) armDelete(el, async () => { const r = await run(sb.from('notes').delete().eq('id', ds.noteDel), '記録を削除しました'); if (r.ok) { await loadNotes(); renderCare(); } });
     else if (ds.reqOk) {
