@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201316">
+<link rel="stylesheet" href="common.css?v=202611201320">
 </head>
 <body>
 <div class="wrap narrow">
@@ -59,7 +59,21 @@
           <button role="tab" data-tab="req" aria-selected="false">修正依頼</button>
         </div>
 
-        <div data-panel="shift" class="card"><div id="st-shifts" class="list"></div></div>
+        <div data-panel="shift" class="stack">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="seg" id="st-shift-view"><button type="button" data-view="list" aria-pressed="true">これからの予定</button><button type="button" data-view="month" aria-pressed="false">1ヶ月カレンダー</button></div>
+          </div>
+          <div id="st-list-box" class="card"><div id="st-shifts" class="list"></div></div>
+          <div id="st-month-box" class="stack" hidden>
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <button class="btn sm" type="button" id="st-cal-prev">← 前月</button>
+              <strong id="st-cal-label" class="num" style="font-size:1.05rem"></strong>
+              <button class="btn sm" type="button" id="st-cal-next">次月 →</button>
+            </div>
+            <div id="st-cal-sum" class="muted small"></div>
+            <div class="cal st-cal" id="st-cal"></div>
+          </div>
+        </div>
 
         <div data-panel="hist" hidden class="stack">
           <div class="row" style="justify-content:space-between">
@@ -104,8 +118,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201316"></script>
-<script src="common.js?v=202611201316"></script>
+<script src="config.js?v=202611201320"></script>
+<script src="common.js?v=202611201320"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -169,6 +183,38 @@ async function loadAll() {
   S.requests = req.data || [];
   S.notes = nt.data || [];
   render();
+  if (S.shiftView === 'month') loadMonthShifts();
+}
+/* ---------- 自分の1ヶ月カレンダー ---------- */
+S.shiftView = 'list'; S.calMonth = today().slice(0, 7); S.calShifts = [];
+function monthGrid(month) {
+  const [y, m] = month.split('-').map(Number), first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
+  const s = new Date(first); s.setDate(1 - ((first.getDay() + 6) % 7));
+  const e = new Date(last); e.setDate(last.getDate() + (6 - ((last.getDay() + 6) % 7)));
+  return [dk(s.getTime()), dk(e.getTime())];
+}
+async function loadMonthShifts() {
+  const sid = mySid(); if (!sid) return;
+  const [a, b] = monthGrid(S.calMonth);
+  const { data, error } = await sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', a).lte('work_date', b).order('work_date').order('start_time');
+  if (error) { toast(errText(error), 'bad'); return; }
+  S.calShifts = (data || []).map(normShift);
+  renderMonth();
+}
+function renderMonth() {
+  const [y, m] = S.calMonth.split('-').map(Number), [from, to] = monthGrid(S.calMonth), t = today();
+  $('#st-cal-label').textContent = `${y}年${m}月`;
+  const inMonth = S.calShifts.filter(s => s.date.startsWith(S.calMonth));
+  const mins = inMonth.reduce((a, s) => { const [p, q] = shiftSpan(s); return a + (q - p) / 6e4; }, 0);
+  $('#st-cal-sum').textContent = inMonth.length ? `${m}月の予定：${inMonth.length}件・${new Set(inMonth.map(s => s.date)).size}日・合計 ${hhmm(mins)}` : `${m}月の予定はまだありません`;
+  let html = WEEK.map((w, i) => `<div class="cal-h${i === 5 ? ' sat' : i === 6 ? ' sun' : ''}">${w}</div>`).join('');
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const hn = holidayName(d), dow = (new Date(at(d, '00:00')).getDay() + 6) % 7;
+    const ss = S.calShifts.filter(s => s.date === d);
+    const cls = ['cal-d', d.startsWith(S.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 6 ? 'sun' : dow === 5 ? 'sat' : ''].join(' ');
+    html += `<div class="${cls}"${hn ? ` title="${esc(hn)}"` : ''}><div class="cal-n"><span class="num">${Number(d.slice(8))}</span>${hn ? '<span class="cal-hol">祝</span>' : ''}</div>${ss.map(s => `<div class="cal-chip" style="border-left-color:var(--accent);cursor:default"><span class="num">${esc(s.start)}</span><b>${esc(s.visit || '—')}</b></div>`).join('')}</div>`;
+  }
+  $('#st-cal').innerHTML = html;
 }
 
 /* ---------- 描画 ---------- */
@@ -279,6 +325,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setInterval(() => { if (mySid()) renderPunch(); }, 15000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && mySid()) loadAll(); });
+  $$('#st-shift-view button').forEach(b => b.addEventListener('click', () => {
+    S.shiftView = b.dataset.view;
+    $$('#st-shift-view button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    $('#st-list-box').hidden = S.shiftView !== 'list'; $('#st-month-box').hidden = S.shiftView !== 'month';
+    if (S.shiftView === 'month') loadMonthShifts();
+  }));
+  const stMove = n => { const [y, m] = S.calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1); S.calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; loadMonthShifts(); };
+  $('#st-cal-prev').addEventListener('click', () => stMove(-1)); $('#st-cal-next').addEventListener('click', () => stMove(1));
   $('#preview-staff').addEventListener('change', async e => {
     S.preview = e.target.value; $('#st-visit').value = ''; $('#st-memo').value = ''; await loadAll();
   });
