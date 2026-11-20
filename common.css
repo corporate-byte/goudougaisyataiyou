@@ -106,6 +106,28 @@ tfoot td{font-weight:700;background:var(--sunk)}
 .sh-chip:hover{border-color:var(--accent)}
 .sh-chip .who{font-weight:700;font-size:.9rem}
 .sh-chip.unassigned{border-style:dashed}
+.seg{display:inline-flex;background:var(--sunk);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:500;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+/* 1ヶ月カレンダー */
+.cal-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));min-width:640px}
+.cal-h{padding:6px 8px;font-size:.78rem;font-weight:700;color:var(--muted);background:var(--sunk);text-align:center}
+.cal-h.sat,.cal-d.sat .cal-n{color:var(--info)}
+.cal-h.sun,.cal-d.sun .cal-n{color:var(--bad)}
+.cal-d{min-height:104px;padding:4px;border-top:1px solid var(--line);border-left:1px solid var(--line);min-width:0}
+.cal-d:nth-child(7n+1){border-left:0}
+.cal-d.out{background:var(--sunk)}
+.cal-d.out>*{opacity:.55}
+.cal-d.today{background:var(--accent-soft)}
+.cal-n{display:flex;gap:4px;align-items:baseline;font-weight:700;font-size:.85rem;margin-bottom:3px;min-width:0}
+.cal-hol{font-size:.68rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-chip{display:block;width:100%;text-align:left;border:1px solid var(--line);border-left:4px solid var(--line);background:var(--surface);border-radius:6px;padding:2px 5px;margin-bottom:3px;font:inherit;font-size:.72rem;line-height:1.3;cursor:pointer;color:var(--ink);min-width:0;overflow:hidden}
+.cal-chip:hover{border-color:var(--accent)}
+.cal-chip.unassigned{border-style:dashed}
+.cal-chip>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-chip b{font-size:.8rem}
+.cal-v{color:var(--muted)}
 .legend{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:700;padding:2px 8px;border:1px solid var(--line);border-radius:999px}
 .legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
 #modal{position:fixed;inset:0;background:rgba(10,20,16,.45);display:grid;place-items:center;z-index:50;
