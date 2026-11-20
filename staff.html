@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201514">
+<link rel="stylesheet" href="common.css?v=202611201520">
 </head>
 <body>
 <div class="wrap narrow">
@@ -87,13 +87,13 @@
         <div data-panel="care" hidden class="stack">
           <form class="card stack" id="care-form">
             <h3>様子を記録する</h3>
-            <label class="f">訪問先（利用者さん）<input id="care-res" list="res-dl" placeholder="名前を選ぶか入力" required></label>
+            <label class="f">訪問先（利用者さん）<select id="care-res" required></select></label>
             <div class="chips" id="care-cats"></div>
             <label class="f">内容<textarea id="care-text" placeholder="例）昼食8割摂取。午後は居室でテレビ。表情穏やか。" required></textarea></label>
             <button class="btn primary" type="submit">記録する</button>
           </form>
           <div class="card">
-            <div class="panel-head"><h3>最近の記録（3日分）</h3><label class="f" style="width:180px">利用者さんで絞る<input id="care-filter" list="res-dl" placeholder="すべて"></label></div>
+            <div class="panel-head"><h3>最近の記録（3日分）</h3><label class="f" style="width:180px">利用者さんで絞る<select id="care-filter"></select></label></div>
             <div id="care-list"></div>
           </div>
         </div>
@@ -118,8 +118,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201514"></script>
-<script src="common.js?v=202611201514"></script>
+<script src="config.js?v=202611201520"></script>
+<script src="common.js?v=202611201520"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -249,7 +249,7 @@ function renderPunch() {
 }
 function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
 function render() {
-  $('#res-dl').innerHTML = S.visits.map(r => `<option value="${esc(r)}">`).join('');
+  $('#res-dl').innerHTML = S.visits.map(r => `<option value="${esc(r)}">`).join(''); fillSelect($('#care-res'), S.visits.map(v => ({ v, t: v })), '利用者さんを選んでください'); fillSelect($('#care-filter'), S.visits.map(v => ({ v, t: v })), 'すべて');
   renderPunch();
   const t = today(), now = Date.now();
   const up = S.shifts.filter(s => s.date >= t || shiftSpan(s)[1] > now);
@@ -269,7 +269,7 @@ function render() {
   renderCare();
 }
 function renderCare() {
-  const f = $('#care-filter').value.trim();
+  const f = $('#care-filter').value;
   const list = S.notes.filter(n => !f || n.resident.includes(f));
   $('#care-list').innerHTML = list.length ? list.map(n => `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${fmtDate(dk(Date.parse(n.created_at)))} ${hm(Date.parse(n.created_at))}</span><span class="muted">記録：${esc(S.names[n.staff_id] || '—')}</span>${n.user_id === S.uid ? `<button class="btn sm danger" type="button" data-del-note="${n.id}" style="margin-left:auto">削除</button>` : ''}</div><p>${esc(n.body)}</p></div>`).join('') : '<div class="empty">該当する記録はありません</div>';
 }
@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTabs('#st-tabs', 'ct-st-tab');
   $('#care-cats').innerHTML = CATS.map(c => `<button type="button" class="chip" aria-pressed="false" data-cat="${c}">${c}</button>`).join('');
   $('#care-cats').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); });
-  $('#care-filter').addEventListener('input', renderCare);
+  $('#care-filter').addEventListener('change', renderCare);
   $('#st-month').addEventListener('input', render);
   $('#st-break').addEventListener('input', e => { e.target.dataset.touched = '1'; });
   $('#logout').addEventListener('click', signOut);
