@@ -163,7 +163,7 @@ function setupTabs(sel, key, onPick) {
 /* ---------- モーダル ---------- */
 let modalSubmit = null;
 function openModal(title, body, okText, onSubmit) {
-  $('#m-title').textContent = title; $('#m-body').innerHTML = body; $('#m-ok').textContent = okText || '保存'; $('#m-ok').hidden = false;
+  $('#m-title').textContent = title; $('#m-body').innerHTML = body; $('#m-ok').textContent = okText || '保存'; $('#m-ok').hidden = false; $('#m-ok').style.cssText = '';
   modalSubmit = onSubmit; $('#modal').hidden = false;
   const f = $('#m-body').querySelector('input,select,textarea'); if (f) f.focus();
 }

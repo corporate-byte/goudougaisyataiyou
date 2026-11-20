@@ -404,3 +404,11 @@ alter table public.settings
   add column night_start text not null default '22:00' check (night_start ~ '^[0-2][0-9]:[0-5][0-9]$'),
   add column night_end text not null default '05:00' check (night_end ~ '^[0-2][0-9]:[0-5][0-9]$');
 update public.settings set night_start = '20:00', night_end = '08:00', night_rate = 25 where id = 1;
+
+-- =============================================================
+-- 追加：スタッフを削除してもシフトは消さず「未定」に、修正依頼があれば削除不可
+-- =============================================================
+alter table public.shifts drop constraint shifts_staff_id_fkey;
+alter table public.shifts add constraint shifts_staff_id_fkey foreign key (staff_id) references public.staff(id) on delete set null;
+alter table public.requests drop constraint requests_staff_id_fkey;
+alter table public.requests add constraint requests_staff_id_fkey foreign key (staff_id) references public.staff(id) on delete restrict;

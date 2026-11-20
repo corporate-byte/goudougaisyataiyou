@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201510">
+<link rel="stylesheet" href="common.css?v=202611201514">
 </head>
 <body>
 <div class="wrap">
@@ -198,8 +198,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201510"></script>
-<script src="common.js?v=202611201510"></script>
+<script src="config.js?v=202611201514"></script>
+<script src="common.js?v=202611201514"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -674,11 +674,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     else if (ds.staffDel) {
       const s = staffById(ds.staffDel); if (!s) return;
-      armDelete(el, async () => {
+      /* 消す前に、何が影響を受けるかを数えて見せる */
+      const [sh, rc] = await Promise.all([
+        sb.from('shifts').select('id', { count: 'exact', head: true }).eq('staff_id', s.id),
+        sb.from('records').select('id', { count: 'exact', head: true }).eq('staff_id', s.id),
+      ]);
+      const nShift = sh.count || 0, nRec = rc.count || 0, nAcc = A.profiles.filter(p => p.staff_id === s.id).length;
+      if (nRec) { toast(`${s.name} さんには勤務記録が${nRec}件あるため削除できません。辞めた方は「編集」から「退職」にしてください`, 'bad'); return; }
+      openModal(`${s.name} さんを削除しますか？`, `
+        <div class="banner bad stack" style="margin:0;gap:6px">
+          <strong>削除すると元に戻せません。</strong>
+          <div>・シフト ${nShift}件 は「未定（担当なし）」になります</div>
+          <div>・ログイン用アカウント ${nAcc}件 は、スタッフ名との紐付けが外れて打刻できなくなります</div>
+        </div>
+        <p class="small" style="margin:0">辞めた方は、削除ではなく「<strong>編集 → 退職</strong>」にすると、記録を残したままシフトの候補から外せます。</p>
+        <label class="f">本当に削除する場合は、確認のため「<strong>${esc(s.name)}</strong>」と入力してください<input name="confirm" autocomplete="off"></label>`, '削除する', async f => {
+        if ((f.confirm || '').replace(/\s/g, '') !== s.name.replace(/\s/g, '')) { toast('名前が一致しません。削除しませんでした', 'bad'); return false; }
         const { error } = await sb.from('staff').delete().eq('id', s.id);
-        if (error) { toast(/foreign key|violates/i.test(error.message) ? `${s.name} さんには勤務記録があるため削除できません。給与の記録を残すため「編集」から「退職」にしてください` : errText(error), 'bad'); return; }
-        toast(`${s.name} さんを削除しました`); await loadBase(); render();
+        if (error) { toast(/foreign key|violates/i.test(error.message) ? `${s.name} さんには勤務記録や修正依頼があるため削除できません。「編集」から「退職」にしてください` : errText(error), 'bad'); return false; }
+        toast(`${s.name} さんを削除しました`); await loadBase(); await reloadShiftsView(); return true;
       });
+      $('#m-ok').style.background = 'var(--bad)'; $('#m-ok').style.borderColor = 'var(--bad)'; $('#m-ok').style.color = 'var(--surface)';
     }
     else if (ds.accDel) {
       const p = A.profiles.find(x => x.id === ds.accDel); if (!p) return;
