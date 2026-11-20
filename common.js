@@ -62,6 +62,10 @@ function jpHolidays(y) {
   });
   return (_holidayCache[y] = h);
 }
+/* メールアドレスがないスタッフ用：ログインIDは「ID@この名前」のメールとして保存（サーバーの関数と同じ値） */
+const ID_DOMAIN = 'id.example.com';
+const isIdLogin = email => String(email || '').endsWith('@' + ID_DOMAIN);
+const loginLabel = email => (isIdLogin(email) ? 'ID ' + email.split('@')[0] : (email || ''));
 const holidayName = key => jpHolidays(Number(key.slice(0, 4))).get(key) || '';
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];   // 表示順（日曜はじまり）
 const jsDay = i => i;                              // WEEK の位置 → Date#getDay()
@@ -186,9 +190,15 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ---------- ログイン画面 ---------- */
 function showAuth(mode, opts) {
   const box = $('#auth'); box.hidden = false; $('#app').hidden = true;
-  const titles = { login: 'ログイン', signup: 'はじめての方（アカウント登録）', reset: 'パスワードの再設定', newpass: '新しいパスワードを決める' };
+  const titles = { login: 'ログイン', idlogin: 'IDとコードでログイン', signup: 'はじめての方（アカウント登録）', reset: 'パスワードの再設定', newpass: '新しいパスワードを決める' };
   const f = {
-    login: `<label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></label>
+    idlogin: `<p class="muted small" style="margin:0">管理者から受け取った「ログインID（4桁）」と「招待コード（6桁）」を入れてください。</p>
+            <label class="f">ログインID<input id="au-id" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="username" required placeholder="例）1234" style="font-size:22px;letter-spacing:.15em"></label>
+            <label class="f">招待コード<input type="password" id="au-pass" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" required placeholder="例）123456" style="font-size:22px;letter-spacing:.15em"></label>
+            <button class="btn primary" type="submit" style="padding:14px;font-size:1.1rem">ログイン</button>
+            <button class="btn link" type="button" data-mode="login">メールアドレスでログインする方はこちら</button>`,
+    login: `<button class="btn" type="button" data-mode="idlogin" style="padding:12px;font-size:1rem;border-color:var(--accent);color:var(--accent)">メールアドレスがない方（IDとコードでログイン）</button>
+            <label class="f">メールアドレス<input type="email" id="au-email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></label>
             <label class="f">パスワード<input type="password" id="au-pass" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
             <button class="btn primary" type="submit">ログイン</button>
             <div class="row" style="justify-content:space-between">${opts.signup ? '<button class="btn link" type="button" data-mode="signup">はじめての方はこちら</button>' : '<span></span>'}<button class="btn link" type="button" data-mode="reset">パスワードを忘れた</button></div>`,
@@ -210,7 +220,7 @@ function showAuth(mode, opts) {
   if (pw) {
     const t = document.createElement('label');
     t.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted);margin-top:-6px';
-    t.innerHTML = '<input type="checkbox" id="au-show" style="width:auto"> パスワードを表示';
+    t.innerHTML = `<input type="checkbox" id="au-show" style="width:auto"> ${mode === 'idlogin' ? 'コードを表示' : 'パスワードを表示'}`;
     pw.closest('label').after(t);
     $('#au-show').addEventListener('change', e => { pw.type = e.target.checked ? 'text' : 'password'; });
   }
@@ -223,6 +233,12 @@ function showAuth(mode, opts) {
     try {
       if (mode === 'login') {
         const { data, error } = await sb.auth.signInWithPassword({ email, password: pass }); if (error) throw error;
+        opts.onSession(data.session);
+      } else if (mode === 'idlogin') {
+        const id = $('#au-id').value.replace(/[^0-9０-９]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+        const code = pass.replace(/[^0-9０-９]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+        const { data, error } = await sb.auth.signInWithPassword({ email: `${id}@${ID_DOMAIN}`, password: code });
+        if (error) { if (/Invalid login credentials/i.test(error.message)) { msg('ログインIDか招待コードが違います。もう一度確かめて入れてください', true); btn.disabled = false; return; } throw error; }
         opts.onSession(data.session);
       } else if (mode === 'signup') {
         const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { name: $('#au-name').value.trim() }, emailRedirectTo: back } });

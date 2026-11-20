@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201434">
+<link rel="stylesheet" href="common.css?v=202611201509">
 </head>
 <body>
 <div class="wrap">
@@ -198,8 +198,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201434"></script>
-<script src="common.js?v=202611201434"></script>
+<script src="config.js?v=202611201509"></script>
+<script src="common.js?v=202611201509"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -492,15 +492,31 @@ function updateShiftPreview() {
 function renderStaff() {
   $('#ad-staff').innerHTML = A.staff.length ? A.staff.map(s => {
     const acc = A.profiles.filter(p => p.staff_id === s.id);
-    return `<tr><td><span class="legend" style="color:${staffColor(s.id)};border:0;padding:0"><i style="background:${staffColor(s.id)}"></i>${esc(s.name)}</span>${s.active ? '' : ' <span class="pill mute">退職</span>'}</td><td class="r">${yen(s.wage)}</td><td class="r">${yen(s.transport)}</td><td>${acc.map(p => `<span class="pill good">${esc(p.email || p.display_name)}</span>`).join(' ') || '<span class="pill mute">未登録</span>'}</td><td><button class="btn sm" type="button" data-staff-edit="${s.id}">編集</button> <button class="btn sm danger" type="button" data-staff-del="${s.id}">削除</button></td></tr>`;
+    return `<tr><td><span class="legend" style="color:${staffColor(s.id)};border:0;padding:0"><i style="background:${staffColor(s.id)}"></i>${esc(s.name)}</span>${s.active ? '' : ' <span class="pill mute">退職</span>'}</td><td class="r">${yen(s.wage)}</td><td class="r">${yen(s.transport)}</td><td>${acc.map(p => `<span class="pill good">${esc(loginLabel(p.email) || p.display_name)}</span>${isIdLogin(p.email) ? ` <button class="btn sm" type="button" data-code-reset="${p.id}">コード再発行</button>` : ''}`).join(' ') || `<button class="btn sm primary" type="button" data-code-new="${s.id}">ID・コードを発行</button>`}</td><td><button class="btn sm" type="button" data-staff-edit="${s.id}">編集</button> <button class="btn sm danger" type="button" data-staff-del="${s.id}">削除</button></td></tr>`;
   }).join('') : '<tr><td colspan="5" class="empty">まだスタッフがいません。上のフォームから追加してください</td></tr>';
   const opts = A.staff.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
   const sorted = A.profiles.slice().sort((a, b) => (a.staff_id ? 1 : 0) - (b.staff_id ? 1 : 0));
-  $('#ad-accounts').innerHTML = sorted.length ? sorted.map(p => `<div class="li" style="flex-wrap:wrap"><div style="flex:1 1 220px"><strong>${esc(p.display_name || '（名前なし）')}</strong>${p.id === A.uid ? ' <span class="tag">あなた</span>' : ''}${p.staff_id ? '' : ' <span class="pill warn">紐付け待ち</span>'}<div class="muted small">${esc(p.email || '')}</div></div>
+  $('#ad-accounts').innerHTML = sorted.length ? sorted.map(p => `<div class="li" style="flex-wrap:wrap"><div style="flex:1 1 220px"><strong>${esc(p.display_name || '（名前なし）')}</strong>${p.id === A.uid ? ' <span class="tag">あなた</span>' : ''}${p.staff_id ? '' : ' <span class="pill warn">紐付け待ち</span>'}<div class="muted small">${esc(loginLabel(p.email))}</div></div>
     <div class="row" style="align-items:center"><select data-acc-staff="${p.id}" style="width:160px"><option value="">（スタッフ未選択）</option>${opts}</select>
     <select data-acc-role="${p.id}" style="width:110px"><option value="staff">スタッフ</option><option value="admin">管理者</option></select>
     <button class="btn sm primary" type="button" data-acc-save="${p.id}">保存</button>${p.id === A.uid ? '' : `<button class="btn sm danger" type="button" data-acc-del="${p.id}">削除</button>`}</div></div>`).join('') : '<div class="empty">まだアカウントがありません</div>';
   sorted.forEach(p => { $(`[data-acc-staff="${p.id}"]`).value = p.staff_id || ''; $(`[data-acc-role="${p.id}"]`).value = p.role; });
+}
+/* 発行したID・コードを大きく表示（この画面を閉じるとコードは二度と表示されない） */
+function showLoginCard(name, loginId, code, isNew) {
+  const page = location.origin + location.pathname.replace(/admin\.html$/, 'staff.html');
+  const text = `${name} さん\nケアタイム勤怠のログイン方法\n1. ${page} を開く\n2. 「IDとコードでログイン」を押す\n3. ログインID：${loginId}\n4. 招待コード：${code}`;
+  openModal(isNew ? `${name} さんのログインを発行しました` : `${name} さんの新しいコード`, `
+    <div class="card" style="text-align:center;background:var(--sunk)">
+      <div class="muted small">ログインID</div><div class="num" style="font-family:var(--f-head);font-size:2.4rem;font-weight:700;letter-spacing:.12em">${esc(loginId)}</div>
+      <div class="muted small" style="margin-top:8px">招待コード</div><div class="num" style="font-family:var(--f-head);font-size:2.4rem;font-weight:700;letter-spacing:.12em">${esc(code)}</div>
+    </div>
+    <p class="small" style="margin:0">この2つを紙に書くか、下の「コピー」でLINEなどに貼って本人に渡してください。<strong>この画面を閉じると、コードはもう表示されません。</strong>忘れたときは「コード再発行」で新しいコードを作れます。</p>
+    <textarea readonly id="lc-text" style="min-height:120px;font-size:14px">${esc(text)}</textarea>`, 'コピー', async () => {
+    try { await navigator.clipboard.writeText(text); toast('コピーしました'); }
+    catch { const ta = $('#lc-text'); ta.select(); toast('枠の中を選択してコピーしてください'); }
+    return false;
+  });
 }
 function renderCare() {
   $('#ad-care').innerHTML = A.notes.length ? A.notes.map(n => { const ts = Date.parse(n.created_at); return `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${fmtDate(dk(ts))} ${hm(ts)}</span><span class="muted">記録：${esc(staffName(n.staff_id))}</span><button class="btn sm danger" type="button" data-note-del="${n.id}" style="margin-left:auto">削除</button></div><p>${esc(n.body)}</p></div>`; }).join('') : '<div class="empty">該当する記録はありません</div>';
@@ -700,6 +716,20 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (ds.svcDel) {
       const s = A.services.find(x => x.id === ds.svcDel); if (!s) return;
       armDelete(el, async () => { const r = await run(sb.from('service_types').delete().eq('id', s.id), `${s.name} を削除しました`); if (r.ok) { await loadBase(); render(); } });
+    }
+    else if (ds.codeNew || ds.codeReset) {
+      const isNew = !!ds.codeNew, s = isNew ? staffById(ds.codeNew) : null, p = isNew ? null : A.profiles.find(x => x.id === ds.codeReset);
+      const who = isNew ? (s && s.name) : (p && p.display_name);
+      el.disabled = true;
+      const { data, error } = await sb.functions.invoke('staff-login', { body: isNew ? { action: 'create', staff_id: ds.codeNew } : { action: 'reset', profile_id: ds.codeReset } });
+      el.disabled = false;
+      if (error || !data || data.error) {
+        let msg = (data && data.error) || '';
+        if (!msg && error && error.context && error.context.json) { try { msg = (await error.context.json()).error; } catch {} }
+        toast(msg || 'ID・コードを発行できませんでした。通信を確認してもう一度お試しください', 'bad'); return;
+      }
+      showLoginCard(who, data.login_id, data.code, isNew);
+      await loadBase(); render();
     }
     else if (ds.accSave) {
       const id = ds.accSave, staff_id = $(`[data-acc-staff="${id}"]`).value || null, role = $(`[data-acc-role="${id}"]`).value;
