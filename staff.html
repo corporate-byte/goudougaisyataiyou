@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201535">
+<link rel="stylesheet" href="common.css?v=202611201548">
 </head>
 <body>
 <div class="wrap narrow">
@@ -123,8 +123,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201535"></script>
-<script src="common.js?v=202611201535"></script>
+<script src="config.js?v=202611201548"></script>
+<script src="common.js?v=202611201548"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -174,7 +174,7 @@ async function start(session) {
 }
 async function loadAll() {
   const sid = mySid(), from = addDays(today(), -100);
-  const [dir, st, sh, rec, req, nt, vs] = await Promise.all([
+  const [dir, st, sh, rec, req, nt, vs, mn] = await Promise.all([
     sb.rpc('staff_directory'),
     sb.from('settings').select('*').eq('id', 1).maybeSingle(),
     sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', addDays(today(), -1)).order('work_date').order('start_time').limit(200),
@@ -182,8 +182,11 @@ async function loadAll() {
     (S.preview ? sb.from('requests').select('*').eq('staff_id', sid) : sb.from('requests').select('*').eq('user_id', S.uid)).order('created_at', { ascending: false }).limit(100),
     sb.from('notes').select('*').gte('noted_at', new Date(at(addDays(today(), -14), '00:00')).toISOString()).order('noted_at', { ascending: false }).limit(500),
     sb.from('visits').select('name').eq('active', true).order('created_at'),
+    /* 自分が書いたケア記録（記録あり／なしの判定用、勤務履歴と同じ期間） */
+    sb.from('notes').select('resident,noted_at,created_at').eq('staff_id', sid).gte('noted_at', new Date(at(from, '00:00')).toISOString()).limit(2000),
   ]);
-  const firstErr = [dir, st, sh, rec, req, nt, vs].find(r => r.error);
+  const firstErr = [dir, st, sh, rec, req, nt, vs, mn].find(r => r.error);
+  S.myNoteKeys = new Set((mn.data || []).map(n => n.resident + '|' + dk(Date.parse(n.noted_at || n.created_at))));
   S.visits = (vs.data || []).map(v => v.name);
   if (firstErr) toast(errText(firstErr.error), 'bad');
   S.names = Object.fromEntries((dir.data || []).map(x => [x.id, x.name]));
@@ -253,12 +256,34 @@ function renderPunch() {
   $('#st-shift').innerHTML = `<div class="shiftline">${sh.length ? '今日のシフト：' + sh.map(s => `<strong class="num">${esc(s.start)}〜${esc(s.end)}</strong>${s.visit ? ` ${esc(s.visit)}` : ""}${s.memo ? `（${esc(s.memo)}）` : ''}`).join('、') : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
 }
 function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
+/* ---------- ケア記録のあり／なし ---------- */
+const hasMyNote = (visit, date) => !!(S.myNoteKeys && S.myNoteKeys.has(visit + '|' + date));
+const careGoAttrs = (visit, date) => `data-care-go="${esc(visit)}" data-care-date="${esc(date)}"`;
+function careStatus(visit, date) {
+  if (!visit) return '';
+  if (date > today()) return '<span class="pill mute">予定</span>';
+  return hasMyNote(visit, date)
+    ? `<button type="button" class="pill good" style="border:0;cursor:pointer;font-family:inherit;flex:none" ${careGoAttrs(visit, date)}>記録あり ✓</button>`
+    : `<button type="button" class="pill warn" style="border:0;cursor:pointer;font-family:inherit;flex:none" ${careGoAttrs(visit, date)}>記録なし ›</button>`;
+}
+/* その利用者さん・その日付を入れた状態でケア記録の画面を開く */
+function goCare(visit, date) {
+  document.querySelector('#st-tabs [data-tab="care"]').click();
+  if (S.visits.includes(visit)) $('#care-res').value = visit;
+  else toast(`${visit} は今は訪問先の一覧にないので、選び直してください`, 'bad');
+  $('#care-date').value = date > today() ? today() : date;
+  $('#care-time').value = '';
+  $('#care-form').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  setTimeout(() => $('#care-text').focus({ preventScroll: true }), 350);
+  if (date > today()) toast('まだ先の予定なので、今日の日付にしています');
+  else toast(`${visit}　${fmtDate(date)} の記録を入力できます`);
+}
 function render() {
   $('#res-dl').innerHTML = S.visits.map(r => `<option value="${esc(r)}">`).join(''); fillSelect($('#care-res'), S.visits.map(v => ({ v, t: v })), '利用者さんを選んでください'); fillSelect($('#care-filter'), S.visits.map(v => ({ v, t: v })), 'すべて');
   renderPunch();
   const t = today(), now = Date.now();
   const up = S.shifts.filter(s => s.date >= t || shiftSpan(s)[1] > now);
-  $('#st-shifts').innerHTML = up.length ? up.slice(0, 40).map(s => `<div class="li"><div class="daycol">${fmtDate(s.date)}${s.date === t ? ' <span class="tag">今日</span>' : ''}</div><div style="flex:1">${s.visit ? `<strong>${esc(s.visit)}</strong><br>` : ""}<span class="num">${esc(s.start)} 〜 ${esc(s.end)}</span>${s.end <= s.start ? ' <span class="pill info">翌日まで</span>' : ''}${s.memo ? `<div class="muted small">${esc(s.memo)}</div>` : ''}</div></div>`).join('') : '<div class="empty">これからのシフトはまだ入っていません</div>';
+  $('#st-shifts').innerHTML = up.length ? up.slice(0, 40).map(s => `<div class="li"><div class="daycol">${fmtDate(s.date)}${s.date === t ? ' <span class="tag">今日</span>' : ''}</div><div style="flex:1;min-width:0">${s.visit ? `<button type="button" class="btn link" style="padding:0;font-weight:700;color:var(--ink);text-align:left" ${careGoAttrs(s.visit, s.date)}>${esc(s.visit)}</button><br>` : ""}<span class="num">${esc(s.start)} 〜 ${esc(s.end)}</span>${s.end <= s.start ? ' <span class="pill info">翌日まで</span>' : ''}${s.memo ? `<div class="muted small">${esc(s.memo)}</div>` : ''}</div>${careStatus(s.visit, s.date)}</div>`).join('') : '<div class="empty">これからのシフトはまだ入っていません</div>';
 
   const m = $('#st-month').value;
   const recs = S.records.filter(r => r.date.startsWith(m)).sort((a, b) => b.inAt - a.inAt);
@@ -266,8 +291,8 @@ function render() {
   $('#st-sum').innerHTML = `<div class="kpi"><b class="num">${sm.days}日</b><span>出勤日数</span></div><div class="kpi"><b class="num">${sm.visits}件</b><span>訪問件数</span></div><div class="kpi"><b class="num">${hhmm(sm.work)}</b><span>実働時間</span></div>`;
   $('#st-hist').innerHTML = recs.length ? recs.map(r => {
     const c = calc(r, S.settings), pend = S.requests.some(q => q.record_id === r.id && q.status === 'pending');
-    return `<div class="li"><div class="daycol">${fmtDate(r.date)}</div><div style="flex:1"><div>${visitLabel(r)}</div><span class="num">${hm(r.inAt)} 〜 ${r.outAt ? hm(r.outAt) : '<span class="pill good">勤務中</span>'}</span><div class="muted small num">休憩 ${r.breakMin}分${c ? ` ・ 実働 ${hhmm(c.work)}` : ''}${r.edited ? ' ・ 管理者が修正' : ''}</div></div>
-      ${pend ? '<span class="pill warn">依頼中</span>' : `<button class="btn sm" type="button" data-req="${r.id}">修正依頼</button>`}</div>`;
+    return `<div class="li" style="flex-wrap:wrap"><div class="daycol">${fmtDate(r.date)}</div><div style="flex:1;min-width:0"><div>${r.visit ? `<button type="button" class="btn link" style="padding:0;font-weight:700;color:var(--ink);text-align:left" ${careGoAttrs(r.visit, r.date)}>${esc(r.visit)}</button>${r.accompany ? ' <span class="pill info">同行</span>' : ''}` : visitLabel(r)}</div><span class="num">${hm(r.inAt)} 〜 ${r.outAt ? hm(r.outAt) : '<span class="pill good">勤務中</span>'}</span><div class="muted small num">休憩 ${r.breakMin}分${c ? ` ・ 実働 ${hhmm(c.work)}` : ''}${r.edited ? ' ・ 管理者が修正' : ''}</div></div>
+      <div class="stack" style="gap:6px;align-items:flex-end">${r.visit ? careStatus(r.visit, r.date) : ''}${pend ? '<span class="pill warn">依頼中</span>' : `<button class="btn sm" type="button" data-req="${r.id}">修正依頼</button>`}</div></div>`;
   }).join('') : '<div class="empty">この月の勤務記録はありません</div>';
 
   $('#st-reqs').innerHTML = S.requests.length ? S.requests.map(q => `<div class="li"><div style="flex:1"><strong>${fmtDate(q.work_date)}</strong> ${q.visit ? esc(q.visit) + (q.accompany ? '（同行）' : '') : ''} <span class="num">${esc(t5(q.in_time))} 〜 ${esc(t5(q.out_time))}</span> <span class="muted small">休憩${q.break_min}分</span><div class="muted small">${q.record_id ? '時刻の修正' : '打刻漏れ'}：${esc(q.reason)}</div>${q.admin_comment ? `<div class="small">管理者より：${esc(q.admin_comment)}</div>` : ''}</div>${reqPill(q.status)}</div>`).join('') : '<div class="empty">修正依頼はまだありません</div>';
@@ -334,6 +359,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('click', async e => {
+    const cg = e.target.closest('[data-care-go]');
+    if (cg) { goCare(cg.dataset.careGo, cg.dataset.careDate); return; }
     const rq = e.target.closest('[data-req]');
     if (rq) requestForm(S.records.find(r => r.id === rq.dataset.req));
     const dn = e.target.closest('[data-del-note]');
