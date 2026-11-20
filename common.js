@@ -66,6 +66,12 @@ function jpHolidays(y) {
 const ID_DOMAIN = 'id.example.com';
 const isIdLogin = email => String(email || '').endsWith('@' + ID_DOMAIN);
 const loginLabel = email => (isIdLogin(email) ? 'ID ' + email.split('@')[0] : (email || ''));
+/* ケア記録の「いつの記録か」の表示。後から入力したものは入力日も小さく出す */
+function noteWhen(n) {
+  const t = Date.parse(n.noted_at || n.created_at), c = Date.parse(n.created_at);
+  const late = dk(c) !== dk(t) ? ` <span class="muted small" style="font-weight:400">（${fmtDate(dk(c))}に入力）</span>` : '';
+  return `${fmtDate(dk(t))}${n.has_time === false ? '' : ' ' + hm(t)}${late}`;
+}
 const holidayName = key => jpHolidays(Number(key.slice(0, 4))).get(key) || '';
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];   // 表示順（日曜はじまり）
 const jsDay = i => i;                              // WEEK の位置 → Date#getDay()

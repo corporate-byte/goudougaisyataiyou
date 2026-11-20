@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201520">
+<link rel="stylesheet" href="common.css?v=202611201535">
 </head>
 <body>
 <div class="wrap">
@@ -198,8 +198,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201520"></script>
-<script src="common.js?v=202611201520"></script>
+<script src="config.js?v=202611201535"></script>
+<script src="common.js?v=202611201535"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -294,10 +294,10 @@ async function loadShifts(from, to) {
 }
 async function loadNotes() {
   const res = $('#ad-care-res').value.trim(), d = $('#ad-care-date').value;
-  let q = sb.from('notes').select('*').order('created_at', { ascending: false }).limit(500);
+  let q = sb.from('notes').select('*').order('noted_at', { ascending: false }).limit(500);
   if (res) q = q.ilike('resident', `%${res}%`);
-  if (d) { const s = new Date(at(d, '00:00')), e = new Date(at(addDays(d, 1), '00:00')); q = q.gte('created_at', s.toISOString()).lt('created_at', e.toISOString()); }
-  else if (!res) q = q.gte('created_at', new Date(Date.now() - 7 * 864e5).toISOString());
+  if (d) { const s = new Date(at(d, '00:00')), e = new Date(at(addDays(d, 1), '00:00')); q = q.gte('noted_at', s.toISOString()).lt('noted_at', e.toISOString()); }
+  else if (!res) q = q.gte('noted_at', new Date(Date.now() - 7 * 864e5).toISOString());
   const { data, error } = await q;
   if (error) toast(errText(error), 'bad'); else A.notes = data;
 }
@@ -519,7 +519,7 @@ function showLoginCard(name, loginId, code, isNew) {
   });
 }
 function renderCare() {
-  $('#ad-care').innerHTML = A.notes.length ? A.notes.map(n => { const ts = Date.parse(n.created_at); return `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${fmtDate(dk(ts))} ${hm(ts)}</span><span class="muted">記録：${esc(staffName(n.staff_id))}</span><button class="btn sm danger" type="button" data-note-del="${n.id}" style="margin-left:auto">削除</button></div><p>${esc(n.body)}</p></div>`; }).join('') : '<div class="empty">該当する記録はありません</div>';
+  $('#ad-care').innerHTML = A.notes.length ? A.notes.map(n => { return `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${noteWhen(n)}</span><span class="muted">記録：${esc(staffName(n.staff_id))}</span><button class="btn sm danger" type="button" data-note-del="${n.id}" style="margin-left:auto">削除</button></div><p>${esc(n.body)}</p></div>`; }).join('') : '<div class="empty">該当する記録はありません</div>';
 }
 
 /* ---------- 操作 ---------- */

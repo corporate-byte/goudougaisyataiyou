@@ -412,3 +412,13 @@ alter table public.shifts drop constraint shifts_staff_id_fkey;
 alter table public.shifts add constraint shifts_staff_id_fkey foreign key (staff_id) references public.staff(id) on delete set null;
 alter table public.requests drop constraint requests_staff_id_fkey;
 alter table public.requests add constraint requests_staff_id_fkey foreign key (staff_id) references public.staff(id) on delete restrict;
+
+-- =============================================================
+-- 追加：ケア記録に「いつの記録か」（後日まとめて入力できる）
+-- =============================================================
+alter table public.notes
+  add column noted_at timestamptz not null default now(),
+  add column has_time boolean not null default true;
+update public.notes set noted_at = created_at;
+alter table public.notes add constraint notes_noted_at_not_future check (noted_at <= created_at + interval '1 day');
+create index on public.notes (noted_at desc);

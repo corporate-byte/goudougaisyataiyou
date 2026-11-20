@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201520">
+<link rel="stylesheet" href="common.css?v=202611201535">
 </head>
 <body>
 <div class="wrap narrow">
@@ -88,12 +88,17 @@
           <form class="card stack" id="care-form">
             <h3>様子を記録する</h3>
             <label class="f">訪問先（利用者さん）<select id="care-res" required></select></label>
+            <div class="grid2">
+              <label class="f">いつの記録か<input type="date" id="care-date" required></label>
+              <label class="f">時刻（わかれば）<input type="time" id="care-time"></label>
+            </div>
+            <p class="muted small" style="margin:-6px 0 0">前の日の分もまとめて入れられます。保存しても日付はそのまま残るので、同じ日の分を続けて入れられます。</p>
             <div class="chips" id="care-cats"></div>
             <label class="f">内容<textarea id="care-text" placeholder="例）昼食8割摂取。午後は居室でテレビ。表情穏やか。" required></textarea></label>
             <button class="btn primary" type="submit">記録する</button>
           </form>
           <div class="card">
-            <div class="panel-head"><h3>最近の記録（3日分）</h3><label class="f" style="width:180px">利用者さんで絞る<select id="care-filter"></select></label></div>
+            <div class="panel-head"><h3>最近の記録（2週間分）</h3><label class="f" style="width:180px">利用者さんで絞る<select id="care-filter"></select></label></div>
             <div id="care-list"></div>
           </div>
         </div>
@@ -118,8 +123,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201520"></script>
-<script src="common.js?v=202611201520"></script>
+<script src="config.js?v=202611201535"></script>
+<script src="common.js?v=202611201535"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -175,7 +180,7 @@ async function loadAll() {
     sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', addDays(today(), -1)).order('work_date').order('start_time').limit(200),
     sb.from('records').select('*').eq('staff_id', sid).gte('work_date', from).order('in_at', { ascending: false }).limit(500),
     (S.preview ? sb.from('requests').select('*').eq('staff_id', sid) : sb.from('requests').select('*').eq('user_id', S.uid)).order('created_at', { ascending: false }).limit(100),
-    sb.from('notes').select('*').gte('created_at', new Date(Date.now() - 3 * 864e5).toISOString()).order('created_at', { ascending: false }).limit(300),
+    sb.from('notes').select('*').gte('noted_at', new Date(at(addDays(today(), -14), '00:00')).toISOString()).order('noted_at', { ascending: false }).limit(500),
     sb.from('visits').select('name').eq('active', true).order('created_at'),
   ]);
   const firstErr = [dir, st, sh, rec, req, nt, vs].find(r => r.error);
@@ -271,7 +276,7 @@ function render() {
 function renderCare() {
   const f = $('#care-filter').value;
   const list = S.notes.filter(n => !f || n.resident.includes(f));
-  $('#care-list').innerHTML = list.length ? list.map(n => `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${fmtDate(dk(Date.parse(n.created_at)))} ${hm(Date.parse(n.created_at))}</span><span class="muted">記録：${esc(S.names[n.staff_id] || '—')}</span>${n.user_id === S.uid ? `<button class="btn sm danger" type="button" data-del-note="${n.id}" style="margin-left:auto">削除</button>` : ''}</div><p>${esc(n.body)}</p></div>`).join('') : '<div class="empty">該当する記録はありません</div>';
+  $('#care-list').innerHTML = list.length ? list.map(n => `<div class="note"><div class="note-head"><strong>${esc(n.resident)}</strong>${(n.cats || []).map(c => `<span class="tag">${esc(c)}</span>`).join('')}<span class="muted num">${noteWhen(n)}</span><span class="muted">記録：${esc(S.names[n.staff_id] || '—')}</span>${n.user_id === S.uid ? `<button class="btn sm danger" type="button" data-del-note="${n.id}" style="margin-left:auto">削除</button>` : ''}</div><p>${esc(n.body)}</p></div>`).join('') : '<div class="empty">該当する記録はありません</div>';
 }
 
 /* ---------- 操作 ---------- */
@@ -311,14 +316,21 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadAll();
   });
 
+  $('#care-date').value = today(); $('#care-date').max = today();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) $('#care-date').max = today(); });
   $('#care-form').addEventListener('submit', async e => {
     e.preventDefault();
     const resident = $('#care-res').value.trim(), body = $('#care-text').value.trim();
     if (!resident || !body) return;
     if (previewBlocked()) return;
     const cats = $$('#care-cats .chip[aria-pressed="true"]').map(b => b.dataset.cat);
-    const r = await run(sb.from('notes').insert({ staff_id: S.profile.staff_id, user_id: S.uid, resident, cats, body }), '記録しました');
-    if (r.ok) { $('#care-text').value = ''; $$('#care-cats .chip').forEach(b => b.setAttribute('aria-pressed', 'false')); loadAll(); }
+    const d = $('#care-date').value || today(), tm = $('#care-time').value;
+    if (d > today()) { toast('未来の日付は選べません', 'bad'); return; }
+    /* 時刻なし：今日なら今の時刻、前の日ならその日の日付だけ */
+    const noted = tm ? at(d, tm) : (d === today() ? Date.now() : at(d, '12:00'));
+    if (noted > Date.now() + 5 * 6e4) { toast('まだ来ていない時刻です。時刻を確かめてください', 'bad'); return; }
+    const r = await run(sb.from('notes').insert({ staff_id: S.profile.staff_id, user_id: S.uid, resident, cats, body, noted_at: new Date(noted).toISOString(), has_time: !!tm || d === today() }), `${fmtDate(d)} の記録を保存しました`);
+    if (r.ok) { $('#care-text').value = ''; $('#care-time').value = ''; $$('#care-cats .chip').forEach(b => b.setAttribute('aria-pressed', 'false')); loadAll(); }
   });
 
   document.addEventListener('click', async e => {
