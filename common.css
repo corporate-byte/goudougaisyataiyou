@@ -29,7 +29,8 @@ h2{font-size:1.15rem} h3{font-size:1rem}
 .brand{display:flex;align-items:center;gap:10px}
 .brand-mark{width:30px;height:30px;border-radius:8px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--f-head);font-weight:700}
 .brand h1{font-size:1.1rem}
-.who{display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted)}
+.who{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.88rem;color:var(--muted)}
+#who-name{white-space:nowrap}
 .banner{border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:.9rem}
 .banner.info{background:var(--info-soft);color:var(--info)}
 .banner.bad{background:var(--bad-soft);color:var(--bad)}
@@ -128,6 +129,15 @@ tfoot td{font-weight:700;background:var(--sunk)}
 .cal-chip>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-chip b{font-size:.8rem}
 .cal-v{color:var(--muted)}
+/* 管理画面のカレンダーもスマホでは画面幅に収める */
+@media (max-width:700px){
+  .cal{min-width:0}
+  .cal-h{padding:5px 2px}
+  .cal-d{min-height:70px;padding:3px 2px}
+  .cal-chip{padding:1px 3px;font-size:.62rem;border-left-width:3px}
+  .cal-chip b{font-size:.68rem}
+  .cal-hol{display:none}
+}
 /* スタッフ画面のカレンダー：スマホ幅に収める */
 .st-cal{min-width:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
 .st-cal .cal-h{padding:5px 2px}
