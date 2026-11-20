@@ -137,6 +137,7 @@ tfoot td{font-weight:700;background:var(--sunk)}
   .cal-chip{padding:1px 3px;font-size:.62rem;border-left-width:3px}
   .cal-chip b{font-size:.68rem}
   .cal-hol{display:none}
+  .cal-end{display:none}
 }
 /* スタッフ画面のカレンダー：スマホ幅に収める */
 .st-cal{min-width:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
