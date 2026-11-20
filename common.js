@@ -63,8 +63,8 @@ function jpHolidays(y) {
   return (_holidayCache[y] = h);
 }
 const holidayName = key => jpHolidays(Number(key.slice(0, 4))).get(key) || '';
-const WEEK = ['月', '火', '水', '木', '金', '土', '日'];   // 表示順（月曜はじまり）
-const jsDay = i => (i + 1) % 7;                              // WEEK の位置 → Date#getDay()
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];   // 表示順（日曜はじまり）
+const jsDay = i => i;                              // WEEK の位置 → Date#getDay()
 
 /* ---------- 計算 ---------- */
 function shiftSpan(s) { const a = at(s.date, s.start); let b = at(s.date, s.end); if (b <= a) b += 864e5; return [a, b]; }

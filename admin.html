@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201344">
+<link rel="stylesheet" href="common.css?v=202611201348">
 </head>
 <body>
 <div class="wrap">
@@ -83,9 +83,9 @@
             <span class="muted small" style="font-weight:500">曜日</span>
             <div class="row" style="align-items:center">
               <div class="chips" id="sh-days"></div>
-              <button class="btn sm" type="button" data-days="0,1,2,3,4">月〜金</button>
-              <button class="btn sm" type="button" data-days="0,2,4">月水金</button>
-              <button class="btn sm" type="button" data-days="1,3">火木</button>
+              <button class="btn sm" type="button" data-days="1,2,3,4,5">月〜金</button>
+              <button class="btn sm" type="button" data-days="1,3,5">月水金</button>
+              <button class="btn sm" type="button" data-days="2,4">火木</button>
               <button class="btn sm" type="button" data-days="0,1,2,3,4,5,6">毎日</button>
               <button class="btn sm" type="button" data-days="">クリア</button>
               <label style="display:flex;align-items:center;gap:6px;font-weight:500;margin-left:6px"><input type="checkbox" id="sh-noholiday" checked style="width:auto;transform:scale(1.15)"> 祝日を除く</label>
@@ -198,8 +198,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201344"></script>
-<script src="common.js?v=202611201344"></script>
+<script src="config.js?v=202611201348"></script>
+<script src="common.js?v=202611201348"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -424,8 +424,8 @@ async function reloadShiftsView() { await loadShifts(addDays(A.weekStart, -1), a
 function calRange() {
   const [y, m] = A.calMonth.split('-').map(Number);
   const first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
-  const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));     // その週の月曜
-  const end = new Date(last); end.setDate(last.getDate() + (6 - ((last.getDay() + 6) % 7))); // その週の日曜
+  const start = new Date(first); start.setDate(1 - first.getDay());     // その週の日曜
+  const end = new Date(last); end.setDate(last.getDate() + (6 - last.getDay())); // その週の土曜
   return [dk(start.getTime()), dk(end.getTime())];
 }
 async function loadCalMonth() { const [a, b] = calRange(); await loadShifts(a, b); }
@@ -452,11 +452,11 @@ function renderCal(shifts) {
   $('#cal-sum').innerHTML = `<div class="kpi"><b class="num">${inMonth.length}件</b><span>${m}月の予定</span></div><div class="kpi"><b class="num">${hhmm(mins)}</b><span>予定の合計時間</span></div>`
     + `<div class="kpi"><b class="num">${new Set(inMonth.map(s => s.date)).size}日</b><span>予定のある日</span></div>`
     + (mode === 'visit' ? `<div class="kpi"><b class="num" style="color:${un ? 'var(--warn)' : 'inherit'}">${un}件</b><span>担当が未定</span></div>` : '');
-  let html = WEEK.map((w, i) => `<div class="cal-h${i === 5 ? ' sat' : i === 6 ? ' sun' : ''}">${w}</div>`).join('');
+  let html = WEEK.map((w, i) => `<div class="cal-h${i === 6 ? ' sat' : i === 0 ? ' sun' : ''}">${w}</div>`).join('');
   for (let d = from; d <= to; d = addDays(d, 1)) {
-    const hn = holidayName(d), dow = (new Date(at(d, '00:00')).getDay() + 6) % 7;
+    const hn = holidayName(d), dow = new Date(at(d, '00:00')).getDay();
     const ss = list.filter(s => s.date === d).sort((a, b) => a.start.localeCompare(b.start));
-    const cls = ['cal-d', d.startsWith(A.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 6 ? 'sun' : dow === 5 ? 'sat' : ''].join(' ');
+    const cls = ['cal-d', d.startsWith(A.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''].join(' ');
     html += `<div class="${cls}"><div class="cal-n"><span class="num">${Number(d.slice(8))}</span>${hn ? `<span class="cal-hol">${esc(hn)}</span>` : ''}</div>${ss.map(s => {
       const color = s.staffId ? staffColor(s.staffId) : 'var(--warn)';
       const who = s.staffId ? esc(shortName(s.staffId)) : '未定';
@@ -522,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const m = today().slice(0, 7);
   ['#ad-att-month', '#ad-pay-month'].forEach(s => { $(s).value = m; });
   $('#sf-color-wrap').innerHTML = colorSelect('', '', 'sf-color');
-  const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); A.weekStart = dk(d.getTime());
+  const d = new Date(); d.setDate(d.getDate() - d.getDay()); A.weekStart = dk(d.getTime());
   setupTabs('#ad-tabs', 'ct-ad-tab');
   $('#logout').addEventListener('click', signOut);
   $('#refresh').addEventListener('click', async () => { await reloadAll(); toast('最新の状態にしました'); });
@@ -542,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadCalMonth(); render();
   };
   $('#cal-prev').addEventListener('click', () => moveMonth(-1)); $('#cal-next').addEventListener('click', () => moveMonth(1)); $('#cal-this').addEventListener('click', () => moveMonth(0));
-  $('#wk-this').addEventListener('click', async () => { const d0 = new Date(); d0.setDate(d0.getDate() - ((d0.getDay() + 6) % 7)); A.weekStart = dk(d0.getTime()); await reloadShiftsView(); });
+  $('#wk-this').addEventListener('click', async () => { const d0 = new Date(); d0.setDate(d0.getDate() - d0.getDay()); A.weekStart = dk(d0.getTime()); await reloadShiftsView(); });
   $('#rec-add').addEventListener('click', () => recordModal(null));
 
   $('#staff-form').addEventListener('submit', async e => {
@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.disabled = false;
     if (r.ok) {
       $('#sh-memo').value = '';
-      const d0 = new Date(at(dates[0], '00:00')); d0.setDate(d0.getDate() - ((d0.getDay() + 6) % 7)); A.weekStart = dk(d0.getTime());
+      const d0 = new Date(at(dates[0], '00:00')); d0.setDate(d0.getDate() - d0.getDay()); A.weekStart = dk(d0.getTime());
       await loadShifts(dates[0], dates[dates.length - 1]); await reloadShiftsView();
     }
   });

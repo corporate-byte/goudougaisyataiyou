@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201344">
+<link rel="stylesheet" href="common.css?v=202611201348">
 </head>
 <body>
 <div class="wrap narrow">
@@ -118,8 +118,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201344"></script>
-<script src="common.js?v=202611201344"></script>
+<script src="config.js?v=202611201348"></script>
+<script src="common.js?v=202611201348"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -189,8 +189,8 @@ async function loadAll() {
 S.shiftView = 'list'; S.calMonth = today().slice(0, 7); S.calShifts = [];
 function monthGrid(month) {
   const [y, m] = month.split('-').map(Number), first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
-  const s = new Date(first); s.setDate(1 - ((first.getDay() + 6) % 7));
-  const e = new Date(last); e.setDate(last.getDate() + (6 - ((last.getDay() + 6) % 7)));
+  const s = new Date(first); s.setDate(1 - first.getDay());
+  const e = new Date(last); e.setDate(last.getDate() + (6 - last.getDay()));
   return [dk(s.getTime()), dk(e.getTime())];
 }
 async function loadMonthShifts() {
@@ -207,11 +207,11 @@ function renderMonth() {
   const inMonth = S.calShifts.filter(s => s.date.startsWith(S.calMonth));
   const mins = inMonth.reduce((a, s) => { const [p, q] = shiftSpan(s); return a + (q - p) / 6e4; }, 0);
   $('#st-cal-sum').textContent = inMonth.length ? `${m}月の予定：${inMonth.length}件・${new Set(inMonth.map(s => s.date)).size}日・合計 ${hhmm(mins)}` : `${m}月の予定はまだありません`;
-  let html = WEEK.map((w, i) => `<div class="cal-h${i === 5 ? ' sat' : i === 6 ? ' sun' : ''}">${w}</div>`).join('');
+  let html = WEEK.map((w, i) => `<div class="cal-h${i === 6 ? ' sat' : i === 0 ? ' sun' : ''}">${w}</div>`).join('');
   for (let d = from; d <= to; d = addDays(d, 1)) {
-    const hn = holidayName(d), dow = (new Date(at(d, '00:00')).getDay() + 6) % 7;
+    const hn = holidayName(d), dow = new Date(at(d, '00:00')).getDay();
     const ss = S.calShifts.filter(s => s.date === d);
-    const cls = ['cal-d', d.startsWith(S.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 6 ? 'sun' : dow === 5 ? 'sat' : ''].join(' ');
+    const cls = ['cal-d', d.startsWith(S.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''].join(' ');
     html += `<div class="${cls}"${hn ? ` title="${esc(hn)}"` : ''}><div class="cal-n"><span class="num">${Number(d.slice(8))}</span>${hn ? '<span class="cal-hol">祝</span>' : ''}</div>${ss.map(s => `<button type="button" class="cal-chip" style="border-left-color:var(--accent)" data-detail="${esc(`${fmtDate(s.date)} ${s.start}〜${s.end} ${s.visit || ''}${s.memo ? '（' + s.memo + '）' : ''}`)}"><span class="num">${esc(s.start)}</span><b>${esc((s.visit || '—').split(/[\s　(（]/)[0])}</b></button>`).join('')}</div>`;
   }
   $('#st-cal').innerHTML = html;
