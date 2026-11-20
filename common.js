@@ -193,8 +193,8 @@ function showAuth(mode, opts) {
   const titles = { login: 'ログイン', idlogin: 'IDとコードでログイン', signup: 'はじめての方（アカウント登録）', reset: 'パスワードの再設定', newpass: '新しいパスワードを決める' };
   const f = {
     idlogin: `<p class="muted small" style="margin:0">管理者から受け取った「ログインID（4桁）」と「招待コード（6桁）」を入れてください。</p>
-            <label class="f">ログインID<input id="au-id" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="username" required placeholder="例）1234" style="font-size:22px;letter-spacing:.15em"></label>
-            <label class="f">招待コード<input type="password" id="au-pass" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" required placeholder="例）123456" style="font-size:22px;letter-spacing:.15em"></label>
+            <label class="f">ログインID<input id="au-id" inputmode="numeric" maxlength="8" autocomplete="username" required placeholder="例）1234" style="font-size:22px;letter-spacing:.15em"></label>
+            <label class="f">招待コード<input type="password" id="au-pass" inputmode="numeric" maxlength="12" autocomplete="current-password" required placeholder="例）123456" style="font-size:22px;letter-spacing:.15em"></label>
             <button class="btn primary" type="submit" style="padding:14px;font-size:1.1rem">ログイン</button>
             <button class="btn link" type="button" data-mode="login">メールアドレスでログインする方はこちら</button>`,
     login: `<button class="btn" type="button" data-mode="idlogin" style="padding:12px;font-size:1rem;border-color:var(--accent);color:var(--accent)">メールアドレスがない方（IDとコードでログイン）</button>
