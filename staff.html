@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611211233">
+<link rel="stylesheet" href="common.css?v=202611211235">
 </head>
 <body>
 <div class="wrap narrow">
@@ -123,8 +123,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611211233"></script>
-<script src="common.js?v=202611211233"></script>
+<script src="config.js?v=202611211235"></script>
+<script src="common.js?v=202611211235"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -258,8 +258,7 @@ function renderPunch() {
   /* 今日のシフトを1件ずつ。始まったものは記録あり／なし、まだのものは「これから」 */
   $('#st-shift').innerHTML = `<div class="shiftline">${sh.length
     ? `<div style="font-weight:700;margin-bottom:2px">今日のシフト（${sh.length}件）</div>` + sh.map((s, i) => {
-        const started = shiftSpan(s)[0] <= now;
-        const status = !s.visit ? '' : started ? careStatus(s.visit, s.date, s.start) : '<span class="pill mute" style="flex:none">これから</span>';
+        const status = s.visit ? careStatus(s.visit, s.date, s.start) : '';
         return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;${i ? 'border-top:1px solid var(--line)' : ''}">
           <div style="min-width:0"><div class="num" style="font-weight:700">${esc(s.start)}〜${esc(s.end)}</div>
           ${s.visit ? `<button type="button" class="btn link" style="padding:0;color:var(--ink);text-align:left;font-size:.95rem" ${careGoAttrs(s.visit, s.date, s.start)}>${esc(s.visit)}</button>` : '<span class="muted">訪問先なし</span>'}
@@ -279,10 +278,10 @@ function noteSnippet(visit, date, time) {
 const careGoAttrs = (visit, date, time) => `data-care-go="${esc(visit)}" data-care-date="${esc(date)}" data-care-time="${esc(time || '')}"`;
 function careStatus(visit, date, time) {
   if (!visit) return '';
-  if (date > today()) return '<span class="pill mute">予定</span>';
-  return hasMyNote(visit, date)
-    ? `<button type="button" class="pill good" style="border:0;cursor:pointer;font-family:inherit;flex:none" ${careGoAttrs(visit, date, time)}>記録あり ✓</button>`
-    : `<button type="button" class="pill warn" style="border:0;cursor:pointer;font-family:inherit;flex:none" ${careGoAttrs(visit, date, time)}>記録なし ›</button>`;
+  if (hasMyNote(visit, date)) return `<button type="button" class="pill good" style="border:0;cursor:pointer;font-family:inherit;flex:none" ${careGoAttrs(visit, date, time)}>記録あり ✓</button>`;
+  /* まだ始まっていない予定（先の日、または今日のこれからの時間）は「予定」 */
+  if (date > today() || (date === today() && time && at(date, time) > Date.now())) return '<span class="pill mute" style="flex:none">予定</span>';
+  return `<button type="button" class="pill warn" style="border:0;cursor:pointer;font-family:inherit;flex:none" ${careGoAttrs(visit, date, time)}>記録なし ›</button>`;
 }
 /* その利用者さん・その日付を入れた状態でケア記録の画面を開く */
 function goCare(visit, date, time) {
