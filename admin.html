@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611211235">
+<link rel="stylesheet" href="common.css?v=202611211239">
 </head>
 <body>
 <div class="wrap">
@@ -40,7 +40,7 @@
 
       <div data-panel="today">
         <div id="ad-today-kpi" class="kpis"></div>
-        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th>シフト</th><th>訪問先</th><th>出勤</th><th>退勤</th><th>状態</th></tr></thead><tbody id="ad-today"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>スタッフ</th><th>シフト</th><th>訪問先</th><th>出勤</th><th>退勤</th><th>ケア記録</th><th>状態</th></tr></thead><tbody id="ad-today"></tbody></table></div>
       </div>
 
       <div data-panel="att" hidden>
@@ -51,7 +51,7 @@
           </div>
           <button class="btn" type="button" id="rec-add">勤務記録を手で追加</button>
         </div>
-        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>訪問先</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">夜間</th><th>情報共有事項</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>日付</th><th>スタッフ</th><th>訪問先</th><th>出勤</th><th>退勤</th><th class="r">休憩</th><th class="r">実働</th><th class="r">夜間</th><th>情報共有事項</th><th>ケア記録</th><th></th></tr></thead><tbody id="ad-att"></tbody></table></div>
       </div>
 
       <div data-panel="reqs" hidden class="stack">
@@ -104,7 +104,8 @@
             <h3>週のシフト（利用者さん別）</h3>
             <div class="row"><button class="btn sm" type="button" id="wk-prev">← 前週</button><button class="btn sm" type="button" id="wk-this">今週</button><span id="wk-label" class="num" style="align-self:center"></span><button class="btn sm" type="button" id="wk-next">次週 →</button></div>
           </div>
-          <div id="sh-legend" class="chips" style="margin-bottom:10px"></div>
+          <div id="sh-legend" class="chips" style="margin-bottom:6px"></div>
+          <p class="muted small" style="margin:0 0 10px"><span style="color:var(--good);font-weight:700">✓</span>＝ケア記録あり　<span style="color:var(--warn);font-weight:700">！</span>＝時間が過ぎたのにケア記録なし</p>
           <div class="tbl-wrap"><table class="shift-grid"><thead id="sh-head"></thead><tbody id="ad-shifts"></tbody></table></div>
           <p class="muted small" style="margin:8px 0 0">シフトを押すと、担当や時間の変更・削除ができます。</p>
         </div>
@@ -120,6 +121,7 @@
         </div>
         <div id="cal-sum" class="kpis" style="margin:0"></div>
         <div class="cal-wrap"><div class="cal" id="cal-grid"></div></div>
+        <p class="muted small" style="margin:0"><span style="color:var(--good);font-weight:700">✓</span>＝担当スタッフのケア記録あり　<span style="color:var(--warn);font-weight:700">！</span>＝時間が過ぎたのにケア記録なし</p>
         <p class="muted small" style="margin:0">予定を押すと、担当や時間の変更・削除ができます。新しく入れるときは「シフト」タブから。</p>
       </div>
 
@@ -198,8 +200,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611211235"></script>
-<script src="common.js?v=202611211235"></script>
+<script src="config.js?v=202611211239"></script>
+<script src="common.js?v=202611211239"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -334,9 +336,9 @@ function render() {
     else if (rs.length) st = '<span class="pill mute">退勤済み</span>';
     else if (sh.length && now > at(t, sh[0].start) + 5 * 6e4) { st = '<span class="pill bad">未出勤（遅れ）</span>'; late++; }
     else if (sh.length) st = '<span class="pill info">出勤前</span>';
-    return `<tr><td>${staffTag(id)}</td><td class="num">${sh.map(s => `${esc(s.start)}〜${esc(s.end)}${s.visit ? ' ' + esc(s.visit) : ''}`).join('<br>') || '<span class="muted">なし</span>'}</td><td>${rs.map(visitLabel).join('<br>') || '—'}</td><td class="num">${rs.map(r => hm(r.inAt)).join('<br>') || '—'}</td><td class="num">${rs.map(r => (r.outAt ? hm(r.outAt) : '—')).join('<br>') || '—'}</td><td>${st}</td></tr>`;
+    return `<tr><td>${staffTag(id)}</td><td class="num">${sh.map(s => `${esc(s.start)}〜${esc(s.end)}${s.visit ? ' ' + esc(s.visit) : ''}`).join('<br>') || '<span class="muted">なし</span>'}</td><td>${rs.map(visitLabel).join('<br>') || '—'}</td><td class="num">${rs.map(r => hm(r.inAt)).join('<br>') || '—'}</td><td class="num">${rs.map(r => (r.outAt ? hm(r.outAt) : '—')).join('<br>') || '—'}</td><td>${sh.map(s => carePill(id, s.visit, t, s.start)).filter(Boolean).join('<br>') || rs.map(r => carePill(id, r.visit, r.date, hm(r.inAt))).filter(Boolean).join('<br>') || '—'}</td><td>${st}</td></tr>`;
   });
-  $('#ad-today').innerHTML = rows.join('') || '<tr><td colspan="6" class="empty">今日のシフトや出勤記録はまだありません</td></tr>';
+  $('#ad-today').innerHTML = rows.join('') || '<tr><td colspan="7" class="empty">今日のシフトや出勤記録はまだありません</td></tr>';
   const pending = A.requests.filter(q => q.status === 'pending');
   $('#ad-today-kpi').innerHTML = `<div class="kpi"><b class="num">${onCount}人</b><span>いま勤務中</span></div><div class="kpi"><b class="num">${todayShifts.length}件</b><span>今日のシフト</span></div><div class="kpi"><b class="num" style="color:${late ? 'var(--bad)' : 'inherit'}">${late}人</b><span>シフト開始を過ぎて未出勤</span></div><div class="kpi"><b class="num" style="color:${pending.length ? 'var(--warn)' : 'inherit'}">${pending.length}件</b><span>未対応の修正依頼</span></div>`;
   $('#ad-badge').innerHTML = pending.length ? `<span class="badge">${pending.length}</span>` : '';
@@ -345,7 +347,7 @@ function render() {
   const m = $('#ad-att-month').value, fs = $('#ad-att-staff').value;
   const ar = recs.filter(r => r.date.startsWith(m) && (!fs || r.staffId === fs)).sort((a, b) => a.inAt - b.inAt);
   const memoCell = r => { const m = [r.inMemo && '出勤：' + r.inMemo, r.outMemo && '退勤：' + r.outMemo].filter(Boolean).join(' / '); return m ? `<span title="${esc(m)}" style="display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom">${esc(m)}</span>` : '<span class="muted">—</span>'; };
-  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td>${visitLabel(r)}${r.service ? ` <span class="tag">${esc(r.service)}</span>` : ''}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td>${memoCell(r)}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="10" class="empty">この月の勤務記録はありません</td></tr>';
+  $('#ad-att').innerHTML = ar.length ? ar.map(r => { const c = calc(r, A.settings); return `<tr><td>${fmtDate(r.date)}</td><td>${esc(staffName(r.staffId))}</td><td>${visitLabel(r)}${r.service ? ` <span class="tag">${esc(r.service)}</span>` : ''}</td><td class="num">${hm(r.inAt)}</td><td class="num">${r.outAt ? hm(r.outAt) + (dk(r.outAt) !== r.date ? ' <span class="muted small">翌</span>' : '') : '<span class="pill good">勤務中</span>'}</td><td class="r">${r.breakMin}分</td><td class="r">${c ? hhmm(c.work) : '—'}</td><td class="r">${c && c.night ? hhmm(c.night) : '—'}</td><td>${memoCell(r)}</td><td>${carePill(r.staffId, r.visit, r.date, hm(r.inAt)) || '—'}</td><td><button class="btn sm" type="button" data-rec-edit="${r.id}">編集</button> <button class="btn sm danger" type="button" data-rec-del="${r.id}">削除</button></td></tr>`; }).join('') : '<tr><td colspan="11" class="empty">この月の勤務記録はありません</td></tr>';
 
   /* 修正依頼 */
   const reqRow = (q, actions) => {
@@ -393,7 +395,7 @@ function renderShifts(shifts) {
   const names = [...new Set(week.map(s => s.visit || '（利用者さん未設定）'))].sort((a, b) => { const ia = order.indexOf(a), ib = order.indexOf(b); return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib) || a.localeCompare(b); });
   $('#ad-shifts').innerHTML = names.length ? names.map(n => `<tr><td>${esc(n)}</td>${days.map(d => {
     const ss = week.filter(s => (s.visit || '（利用者さん未設定）') === n && s.date === d).sort((a, b) => a.start.localeCompare(b.start));
-    return `<td class="${d === t ? 'today' : ''}">${ss.map(s => `<button type="button" class="sh-chip${s.staffId ? '' : ' unassigned'}" data-shift-open="${s.id}"><span class="num">${esc(s.start)}〜${esc(s.end)}</span><br><span class="who" style="color:${s.staffId ? staffColor(s.staffId) : 'var(--warn)'}">${s.staffId ? esc(shortName(s.staffId)) : '未定'}</span>${s.memo ? `<br><span class="muted">${esc(s.memo)}</span>` : ''}</button>`).join('')}</td>`;
+    return `<td class="${d === t ? 'today' : ''}">${ss.map(s => `<button type="button" class="sh-chip${s.staffId ? '' : ' unassigned'}" data-shift-open="${s.id}"><span class="num">${esc(s.start)}〜${esc(s.end)}</span><br><span class="who" style="color:${s.staffId ? staffColor(s.staffId) : 'var(--warn)'}">${s.staffId ? esc(shortName(s.staffId)) : '未定'}</span>${careMark(s.staffId, s.visit, s.date, s.start)}${s.memo ? `<br><span class="muted">${esc(s.memo)}</span>` : ''}</button>`).join('')}</td>`;
   }).join('')}</tr>`).join('') : `<tr><td colspan="8" class="empty">この週のシフトはまだありません。上のフォームから追加してください</td></tr>`;
   const used = [...new Set(week.map(s => s.staffId).filter(Boolean))];
   $('#sh-legend').innerHTML = A.staff.filter(s => s.active || used.includes(s.id)).map(s => `<span class="legend" style="color:${staffColor(s.id)}"><i style="background:${staffColor(s.id)}"></i>${esc(s.name)}<span class="muted" style="font-weight:400">${week.filter(x => x.staffId === s.id).length}件</span></span>`).join('')
@@ -428,7 +430,35 @@ function calRange() {
   const end = new Date(last); end.setDate(last.getDate() + (6 - last.getDay())); // その週の土曜
   return [dk(start.getTime()), dk(end.getTime())];
 }
-async function loadCalMonth() { const [a, b] = calRange(); await loadShifts(a, b); }
+async function loadCalMonth() { const [a, b] = calRange(); await loadShifts(a, b); await loadNoteKeys(); }
+/* ---------- ケア記録のあり／なし（スタッフ｜利用者さん｜日付） ---------- */
+A.noteKeys = new Map();
+const noteKey = (sid, visit, date) => `${sid}|${visit}|${date}`;
+async function loadNoteKeys() {
+  const t = today();
+  const from = [monthRange($('#ad-att-month').value)[0], calRange()[0], addDays(A.weekStart, -1), addDays(t, -1)].sort()[0];
+  try {
+    const rows = await fetchAll(() => sb.from('notes').select('staff_id,resident,noted_at,created_at,body').gte('noted_at', new Date(at(from, '00:00')).toISOString()).order('noted_at'));
+    const m = new Map();
+    rows.forEach(n => { const k = noteKey(n.staff_id, n.resident, dk(Date.parse(n.noted_at || n.created_at))); if (!m.has(k)) m.set(k, n.body || ''); });
+    A.noteKeys = m;
+  } catch (e) { toast(errText(e), 'bad'); }
+}
+/* 'done'＝記録あり / 'missing'＝時間が過ぎたのに記録なし / 'future'＝まだ先 / ''＝判定しない */
+function careState(sid, visit, date, time) {
+  if (!sid || !visit) return '';
+  if (A.noteKeys.has(noteKey(sid, visit, date))) return 'done';
+  if (date > today() || (date === today() && time && at(date, time) > Date.now())) return 'future';
+  return 'missing';
+}
+function carePill(sid, visit, date, time) {
+  const s = careState(sid, visit, date, time);
+  if (s === 'done') return `<button type="button" class="pill good" style="border:0;cursor:pointer;font-family:inherit" title="${esc(A.noteKeys.get(noteKey(sid, visit, date)))}" data-admin-care="${esc(visit)}" data-admin-care-date="${esc(date)}">記録あり ✓</button>`;
+  if (s === 'missing') return '<span class="pill warn">記録なし</span>';
+  if (s === 'future') return '<span class="pill mute">予定</span>';
+  return '';
+}
+const careMark = (sid, visit, date, time) => { const s = careState(sid, visit, date, time); return s === 'done' ? '<span style="color:var(--good);font-weight:700" title="ケア記録あり"> ✓</span>' : s === 'missing' ? '<span style="color:var(--warn);font-weight:700" title="ケア記録なし"> ！</span>' : ''; };
 const shiftMinutes = s => { const [a, b] = shiftSpan(s); return (b - a) / 6e4; };
 function renderCal(shifts) {
   const mode = A.calMode, sel = $('#cal-target');
@@ -463,7 +493,7 @@ function renderCal(shifts) {
       const label = mode === 'visit'
         ? `${target ? '' : `<span class="cal-v"><span class="v-full">${esc(s.visit || '—')}</span><span class="v-short">${esc((s.visit || '—').split(/[\s　(（]/)[0])}</span></span>`}<b style="color:${color}">${who}</b>`
         : `<span class="cal-v"><span class="v-full">${esc(s.visit || '—')}</span><span class="v-short">${esc((s.visit || '—').split(/[\s　(（]/)[0])}</span></span>${target ? '' : `<b style="color:${color}">${who}</b>`}`;
-      return `<button type="button" class="cal-chip${s.staffId ? '' : ' unassigned'}" style="border-left-color:${color}" data-shift-open="${s.id}"><span class="num">${esc(s.start)}<span class="cal-end">〜${esc(s.end)}</span></span>${label}</button>`;
+      return `<button type="button" class="cal-chip${s.staffId ? '' : ' unassigned'}" style="border-left-color:${color}" data-shift-open="${s.id}"><span class="num">${esc(s.start)}<span class="cal-end">〜${esc(s.end)}</span>${careMark(s.staffId, s.visit, s.date, s.start)}</span>${label}</button>`;
     }).join('')}</div>`;
   }
   $('#cal-grid').innerHTML = html;
@@ -542,13 +572,13 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTabs('#ad-tabs', 'ct-ad-tab');
   $('#logout').addEventListener('click', signOut);
   $('#refresh').addEventListener('click', async () => { await reloadAll(); toast('最新の状態にしました'); });
-  $('#ad-att-month').addEventListener('input', async e => { await loadMonth(e.target.value); render(); });
+  $('#ad-att-month').addEventListener('input', async e => { await loadMonth(e.target.value); await loadNoteKeys(); render(); });
   $('#ad-pay-month').addEventListener('input', async e => { await loadMonth(e.target.value); render(); });
   $('#ad-att-staff').addEventListener('input', render);
   let careTimer; const careReload = () => { clearTimeout(careTimer); careTimer = setTimeout(async () => { await loadNotes(); renderCare(); }, 350); };
   $('#ad-care-res').addEventListener('input', careReload); $('#ad-care-date').addEventListener('input', careReload);
   $('#care-clear').addEventListener('click', () => { $('#ad-care-res').value = ''; $('#ad-care-date').value = ''; careReload(); });
-  const moveWeek = async n => { A.weekStart = addDays(A.weekStart, n); await loadShifts(A.weekStart, addDays(A.weekStart, 6)); render(); };
+  const moveWeek = async n => { A.weekStart = addDays(A.weekStart, n); await loadShifts(A.weekStart, addDays(A.weekStart, 6)); await loadNoteKeys(); render(); };
   $('#wk-prev').addEventListener('click', () => moveWeek(-7)); $('#wk-next').addEventListener('click', () => moveWeek(7));
   $$('#cal-mode button').forEach(b => b.addEventListener('click', () => { A.calMode = b.dataset.mode; render(); }));
   $('#cal-target').addEventListener('change', e => { A.calTarget[A.calMode] = e.target.value; render(); });
@@ -625,6 +655,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', async e => {
     const el = e.target.closest('button'); if (!el) return;
     const ds = el.dataset;
+    if (ds.adminCare) {
+      /* その利用者さん・その日のケア記録を「ケア記録」タブで表示 */
+      $('#ad-care-res').value = ds.adminCare; $('#ad-care-date').value = ds.adminCareDate;
+      document.querySelector('#ad-tabs [data-tab="care"]').click();
+      await loadNotes(); renderCare(); window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (ds.recEdit) recordModal(A.records.get(ds.recEdit));
     else if (ds.recDel) armDelete(el, async () => { const r = await run(sb.from('records').delete().eq('id', ds.recDel), '勤務記録を削除しました'); if (r.ok) { A.records.delete(ds.recDel); render(); } });
     else if (ds.shiftOpen) { const s = A.shifts.get(ds.shiftOpen); if (s) shiftModal(s); }
@@ -755,7 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  setInterval(async () => { if (A.me && A.me.role === 'admin' && !document.hidden) { const t = today(); await Promise.all([loadRecordsRange(addDays(t, -1), t), loadOpenRecords()]); render(); } }, 60000);
+  setInterval(async () => { if (A.me && A.me.role === 'admin' && !document.hidden) { const t = today(); await Promise.all([loadRecordsRange(addDays(t, -1), t), loadOpenRecords(), loadNoteKeys()]); render(); } }, 60000);
 
   bootAuth({ signup: true, subtitle: '管理者用（はじめて使うときは、オーナーが最初にアカウント登録してください）', onSession: async session => {
     A.uid = session.user.id;
