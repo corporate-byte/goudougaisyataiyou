@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611201604">
+<link rel="stylesheet" href="common.css?v=202611211233">
 </head>
 <body>
 <div class="wrap narrow">
@@ -123,8 +123,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611201604"></script>
-<script src="common.js?v=202611201604"></script>
+<script src="config.js?v=202611211233"></script>
+<script src="common.js?v=202611211233"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -255,7 +255,17 @@ function renderPunch() {
   const sh = S.shifts.filter(s => s.date === t || (s.date === addDays(t, -1) && shiftSpan(s)[1] > now));
   /* いまの時間帯のシフトがあれば、その利用者さんを最初から選んでおく */
   if (!open && !$('#st-visit').value) { const cur = sh.find(s => { const [a, b] = shiftSpan(s); return now >= a - 60 * 6e4 && now <= b && S.visits.includes(s.visit); }); if (cur) $('#st-visit').value = cur.visit; }
-  $('#st-shift').innerHTML = `<div class="shiftline">${sh.length ? '今日のシフト：' + sh.map(s => `<strong class="num">${esc(s.start)}〜${esc(s.end)}</strong>${s.visit ? ` ${esc(s.visit)}` : ""}${s.memo ? `（${esc(s.memo)}）` : ''}`).join('、') : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
+  /* 今日のシフトを1件ずつ。始まったものは記録あり／なし、まだのものは「これから」 */
+  $('#st-shift').innerHTML = `<div class="shiftline">${sh.length
+    ? `<div style="font-weight:700;margin-bottom:2px">今日のシフト（${sh.length}件）</div>` + sh.map((s, i) => {
+        const started = shiftSpan(s)[0] <= now;
+        const status = !s.visit ? '' : started ? careStatus(s.visit, s.date, s.start) : '<span class="pill mute" style="flex:none">これから</span>';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;${i ? 'border-top:1px solid var(--line)' : ''}">
+          <div style="min-width:0"><div class="num" style="font-weight:700">${esc(s.start)}〜${esc(s.end)}</div>
+          ${s.visit ? `<button type="button" class="btn link" style="padding:0;color:var(--ink);text-align:left;font-size:.95rem" ${careGoAttrs(s.visit, s.date, s.start)}>${esc(s.visit)}</button>` : '<span class="muted">訪問先なし</span>'}
+          ${s.memo ? `<div class="muted small">${esc(s.memo)}</div>` : ''}${noteSnippet(s.visit, s.date, s.start)}</div>${status}</div>`;
+      }).join('')
+    : '<span class="muted">今日のシフト予定はありません</span>'}</div>`;
 }
 function reqPill(s) { return s === 'approved' ? '<span class="pill good">承認</span>' : s === 'rejected' ? '<span class="pill bad">却下</span>' : '<span class="pill warn">確認待ち</span>'; }
 /* ---------- ケア記録のあり／なし ---------- */
