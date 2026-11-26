@@ -129,6 +129,11 @@ tfoot td{font-weight:700;background:var(--sunk)}
 .cal-chip>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-chip b{font-size:.8rem}
 .cal-v{color:var(--muted)}
+/* 週表示：マスを縦に広く、時刻は終わりまで出す */
+.cal.week .cal-d{min-height:260px}
+.cal.week .cal-chip{padding:4px 6px;margin-bottom:5px}
+.cal.week .cal-end{display:inline!important}
+.cal.week .cal-chip>*{white-space:normal}
 .v-short{display:none}
 /* 管理画面のカレンダーもスマホでは画面幅に収める */
 @media (max-width:700px){

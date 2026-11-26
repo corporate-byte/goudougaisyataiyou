@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611211239">
+<link rel="stylesheet" href="common.css?v=202611261532">
 </head>
 <body>
 <div class="wrap">
@@ -32,7 +32,7 @@
         <button role="tab" data-tab="reqs" aria-selected="false">修正依頼<span id="ad-badge"></span></button>
         <button role="tab" data-tab="pay" aria-selected="false">給与計算</button>
         <button role="tab" data-tab="shifts" aria-selected="false">シフト</button>
-        <button role="tab" data-tab="cal" aria-selected="false">1ヶ月カレンダー</button>
+        <button role="tab" data-tab="cal" aria-selected="false">カレンダー</button>
         <button role="tab" data-tab="staff" aria-selected="false">スタッフ</button>
         <button role="tab" data-tab="care" aria-selected="false">ケア記録</button>
         <button role="tab" data-tab="cfg" aria-selected="false">設定</button>
@@ -114,6 +114,7 @@
       <div data-panel="cal" hidden class="stack">
         <div class="panel-head" style="margin:0">
           <div class="row">
+            <div class="seg" id="cal-view"><button type="button" data-view="month" aria-pressed="true">月</button><button type="button" data-view="week" aria-pressed="false">週</button></div>
             <div class="seg" id="cal-mode"><button type="button" data-mode="visit" aria-pressed="true">利用者ごと</button><button type="button" data-mode="staff" aria-pressed="false">スタッフごと</button></div>
             <label class="f" style="width:210px"><span id="cal-target-label">利用者さん</span><select id="cal-target"></select></label>
           </div>
@@ -200,13 +201,14 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611211239"></script>
-<script src="common.js?v=202611211239"></script>
+<script src="config.js?v=202611261532"></script>
+<script src="common.js?v=202611261532"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
   shifts: new Map(), records: new Map(), requests: [], notes: [], weekStart: null, loadedMonths: new Set(), payRows: [],
-  calMonth: today().slice(0, 7), calMode: 'visit', calTarget: { visit: '', staff: '' } };
+  calMonth: today().slice(0, 7), calMode: 'visit', calTarget: { visit: '', staff: '' },
+  calView: 'month', calWeek: addDays(today(), -new Date().getDay()) };
 const staffById = id => A.staff.find(s => s.id === id);
 const staffName = id => (staffById(id) || {}).name || '（不明）';
 /* 色：設定した色、なければ登録順で自動 */
@@ -422,8 +424,9 @@ function shiftModal(s) {
   });
 }
 async function reloadShiftsView() { await loadShifts(addDays(A.weekStart, -1), addDays(A.weekStart, 7)); await loadShifts(today(), today()); await loadCalMonth(); render(); }
-/* ---------- 1ヶ月カレンダー ---------- */
+/* ---------- カレンダー（月・週） ---------- */
 function calRange() {
+  if (A.calView === 'week') return [A.calWeek, addDays(A.calWeek, 6)];
   const [y, m] = A.calMonth.split('-').map(Number);
   const first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
   const start = new Date(first); start.setDate(1 - first.getDay());     // その週の日曜
@@ -473,21 +476,25 @@ function renderCal(shifts) {
   sel.value = A.calTarget[mode] || '';
   const target = sel.value;
   const [y, m] = A.calMonth.split('-').map(Number);
-  $('#cal-label').textContent = `${y}年${m}月`;
+  const week = A.calView === 'week';
+  $$('#cal-view button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === A.calView)));
+  $('#cal-prev').textContent = week ? '← 前週' : '← 前月'; $('#cal-this').textContent = week ? '今週' : '今月'; $('#cal-next').textContent = week ? '次週 →' : '次月 →';
   const [from, to] = calRange(), t = today();
+  $('#cal-label').textContent = week ? `${fmtDate(from)}〜${fmtDate(to)}` : `${y}年${m}月`;
+  $('#cal-grid').classList.toggle('week', week);
   const match = s => mode === 'visit' ? (!target || s.visit === target) : (!target || (target === '__none' ? !s.staffId : s.staffId === target));
   const list = shifts.filter(s => s.date >= from && s.date <= to && match(s));
-  const inMonth = list.filter(s => s.date.startsWith(A.calMonth));
+  const inMonth = week ? list : list.filter(s => s.date.startsWith(A.calMonth));
   const mins = inMonth.reduce((a, s) => a + shiftMinutes(s), 0), un = inMonth.filter(s => !s.staffId).length;
-  $('#cal-sum').innerHTML = `<div class="kpi"><b class="num">${inMonth.length}件</b><span>${m}月の予定</span></div><div class="kpi"><b class="num">${hhmm(mins)}</b><span>予定の合計時間</span></div>`
+  $('#cal-sum').innerHTML = `<div class="kpi"><b class="num">${inMonth.length}件</b><span>${week ? 'この週' : m + '月'}の予定</span></div><div class="kpi"><b class="num">${hhmm(mins)}</b><span>予定の合計時間</span></div>`
     + `<div class="kpi"><b class="num">${new Set(inMonth.map(s => s.date)).size}日</b><span>予定のある日</span></div>`
     + (mode === 'visit' ? `<div class="kpi"><b class="num" style="color:${un ? 'var(--warn)' : 'inherit'}">${un}件</b><span>担当が未定</span></div>` : '');
   let html = WEEK.map((w, i) => `<div class="cal-h${i === 6 ? ' sat' : i === 0 ? ' sun' : ''}">${w}</div>`).join('');
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const hn = holidayName(d), dow = new Date(at(d, '00:00')).getDay();
     const ss = list.filter(s => s.date === d).sort((a, b) => a.start.localeCompare(b.start));
-    const cls = ['cal-d', d.startsWith(A.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''].join(' ');
-    html += `<div class="${cls}"><div class="cal-n"><span class="num">${Number(d.slice(8))}</span>${hn ? `<span class="cal-hol">${esc(hn)}</span>` : ''}</div>${ss.map(s => {
+    const cls = ['cal-d', week || d.startsWith(A.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''].join(' ');
+    html += `<div class="${cls}"><div class="cal-n"><span class="num">${week ? fmtDate(d).replace(/\(.\)/, '') : Number(d.slice(8))}</span>${hn ? `<span class="cal-hol">${esc(hn)}</span>` : ''}</div>${ss.map(s => {
       const color = s.staffId ? staffColor(s.staffId) : 'var(--warn)';
       const who = s.staffId ? esc(shortName(s.staffId)) : '未定';
       const label = mode === 'visit'
@@ -583,10 +590,23 @@ document.addEventListener('DOMContentLoaded', () => {
   $$('#cal-mode button').forEach(b => b.addEventListener('click', () => { A.calMode = b.dataset.mode; render(); }));
   $('#cal-target').addEventListener('change', e => { A.calTarget[A.calMode] = e.target.value; render(); });
   const moveMonth = async n => {
-    if (n === 0) A.calMonth = today().slice(0, 7);
+    if (A.calView === 'week') {
+      A.calWeek = n === 0 ? addDays(today(), -new Date().getDay()) : addDays(A.calWeek, 7 * n);
+      A.calMonth = A.calWeek.slice(0, 7);
+    } else if (n === 0) A.calMonth = today().slice(0, 7);
     else { const [y, m] = A.calMonth.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); A.calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
     await loadCalMonth(); render();
   };
+  $$('#cal-view button').forEach(b => b.addEventListener('click', async () => {
+    if (A.calView === b.dataset.view) return;
+    A.calView = b.dataset.view;
+    /* 月→週：表示中の月に今日があれば今週、なければその月の最初の週。週→月：その週の月 */
+    if (A.calView === 'week') {
+      const base = today().startsWith(A.calMonth) ? today() : A.calMonth + '-01';
+      A.calWeek = addDays(base, -new Date(at(base, '00:00')).getDay());
+    } else A.calMonth = addDays(A.calWeek, 3).slice(0, 7);
+    await loadCalMonth(); render();
+  }));
   $('#cal-prev').addEventListener('click', () => moveMonth(-1)); $('#cal-next').addEventListener('click', () => moveMonth(1)); $('#cal-this').addEventListener('click', () => moveMonth(0));
   $('#wk-this').addEventListener('click', async () => { const d0 = new Date(); d0.setDate(d0.getDate() - d0.getDay()); A.weekStart = dk(d0.getTime()); await reloadShiftsView(); });
   $('#rec-add').addEventListener('click', () => recordModal(null));
