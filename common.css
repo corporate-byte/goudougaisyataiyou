@@ -134,6 +134,12 @@ tfoot td{font-weight:700;background:var(--sunk)}
 .cal.week .cal-chip{padding:4px 6px;margin-bottom:5px}
 .cal.week .cal-end{display:inline!important}
 .cal.week .cal-chip>*{white-space:normal}
+/* スタッフ画面の週表示：いつも1日ずつ縦に */
+.st-cal.week{grid-template-columns:1fr}
+.st-cal.week .cal-d{min-height:0;border-left:0;padding:8px 10px}
+.st-cal.week .cal-n{font-size:.95rem;margin-bottom:6px}
+.st-cal.week .cal-chip{font-size:.85rem;padding:6px 8px}
+.st-cal.week .cal-chip *{white-space:normal}
 /* スマホの週表示は、日ごとに縦に並べる */
 @media (max-width:700px){
   .cal.week{grid-template-columns:1fr}

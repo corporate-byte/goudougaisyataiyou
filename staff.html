@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611261533">
+<link rel="stylesheet" href="common.css?v=202611261536">
 </head>
 <body>
 <div class="wrap narrow">
@@ -61,10 +61,14 @@
 
         <div data-panel="shift" class="stack">
           <div class="row" style="justify-content:space-between;align-items:center">
-            <div class="seg" id="st-shift-view"><button type="button" data-view="list" aria-pressed="true">これからの予定</button><button type="button" data-view="month" aria-pressed="false">1ヶ月カレンダー</button></div>
+            <div class="seg" id="st-shift-view"><button type="button" data-view="list" aria-pressed="true">これからの予定</button><button type="button" data-view="month" aria-pressed="false">カレンダー</button></div>
           </div>
           <div id="st-list-box" class="card"><div id="st-shifts" class="list"></div></div>
           <div id="st-month-box" class="stack" hidden>
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <div class="seg" id="st-cal-view"><button type="button" data-v="month" aria-pressed="true">月</button><button type="button" data-v="week" aria-pressed="false">週</button></div>
+              <button class="btn sm" type="button" id="st-cal-this">今月</button>
+            </div>
             <div class="row" style="justify-content:space-between;align-items:center">
               <button class="btn sm" type="button" id="st-cal-prev">← 前月</button>
               <strong id="st-cal-label" class="num" style="font-size:1.05rem"></strong>
@@ -123,8 +127,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611261533"></script>
-<script src="common.js?v=202611261533"></script>
+<script src="config.js?v=202611261536"></script>
+<script src="common.js?v=202611261536"></script>
 <script>
 'use strict';
 const S = { uid: null, profile: null, preview: null, staffName: '', names: {}, settings: { ot_hours: 8 }, visits: [], shifts: [], records: [], requests: [], notes: [] };
@@ -200,8 +204,10 @@ async function loadAll() {
   render();
   if (S.shiftView === 'month') loadMonthShifts();
 }
-/* ---------- 自分の1ヶ月カレンダー ---------- */
+/* ---------- 自分のカレンダー（月・週） ---------- */
 S.shiftView = 'list'; S.calMonth = today().slice(0, 7); S.calShifts = [];
+S.calView = 'month'; S.calWeek = addDays(today(), -new Date().getDay());
+const calSpan = () => (S.calView === 'week' ? [S.calWeek, addDays(S.calWeek, 6)] : monthGrid(S.calMonth));
 function monthGrid(month) {
   const [y, m] = month.split('-').map(Number), first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
   const s = new Date(first); s.setDate(1 - first.getDay());
@@ -210,18 +216,36 @@ function monthGrid(month) {
 }
 async function loadMonthShifts() {
   const sid = mySid(); if (!sid) return;
-  const [a, b] = monthGrid(S.calMonth);
+  const [a, b] = calSpan();
   const { data, error } = await sb.from('shifts').select('*').eq('staff_id', sid).gte('work_date', a).lte('work_date', b).order('work_date').order('start_time');
   if (error) { toast(errText(error), 'bad'); return; }
   S.calShifts = (data || []).map(normShift);
   renderMonth();
 }
 function renderMonth() {
-  const [y, m] = S.calMonth.split('-').map(Number), [from, to] = monthGrid(S.calMonth), t = today();
-  $('#st-cal-label').textContent = `${y}年${m}月`;
-  const inMonth = S.calShifts.filter(s => s.date.startsWith(S.calMonth));
+  const week = S.calView === 'week';
+  const [y, m] = S.calMonth.split('-').map(Number), [from, to] = calSpan(), t = today();
+  $$('#st-cal-view button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.calView)));
+  $('#st-cal-prev').textContent = week ? '← 前週' : '← 前月'; $('#st-cal-next').textContent = week ? '次週 →' : '次月 →'; $('#st-cal-this').textContent = week ? '今週' : '今月';
+  $('#st-cal-label').textContent = week ? `${fmtDate(from)}〜${fmtDate(to)}` : `${y}年${m}月`;
+  $('#st-cal').classList.toggle('week', week);
+  const inMonth = week ? S.calShifts : S.calShifts.filter(s => s.date.startsWith(S.calMonth));
   const mins = inMonth.reduce((a, s) => { const [p, q] = shiftSpan(s); return a + (q - p) / 6e4; }, 0);
-  $('#st-cal-sum').textContent = inMonth.length ? `${m}月の予定：${inMonth.length}件・${new Set(inMonth.map(s => s.date)).size}日・合計 ${hhmm(mins)}` : `${m}月の予定はまだありません`;
+  const span = week ? 'この週' : `${m}月`;
+  $('#st-cal-sum').textContent = inMonth.length ? `${span}の予定：${inMonth.length}件・${new Set(inMonth.map(s => s.date)).size}日・合計 ${hhmm(mins)}` : `${span}の予定はまだありません`;
+  if (week) {
+    /* 週表示：1日ずつ縦に、時間・利用者さん（押すと記録画面）・記録あり／なし */
+    let wh = '';
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      const hn = holidayName(d), dow = new Date(at(d, '00:00')).getDay();
+      const ss = S.calShifts.filter(s => s.date === d);
+      const cls = ['cal-d', d === t ? 'today' : '', hn || dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''].join(' ');
+      wh += `<div class="${cls}"><div class="cal-n"><span class="num">${fmtDate(d)}</span>${hn ? `<span class="cal-hol" style="display:inline">${esc(hn)}</span>` : ''}</div>${ss.length ? ss.map(s => `<div class="cal-chip" style="border-left-color:var(--accent);display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">
+        <div style="min-width:0"><span class="num" style="display:block">${esc(s.start)}〜${esc(s.end)}</span>${s.visit ? `<button type="button" class="btn link" style="padding:0;color:var(--ink);text-align:left;font-weight:700" ${careGoAttrs(s.visit, s.date, s.start)}>${esc(s.visit)}</button>` : '<span class="muted">訪問先なし</span>'}${s.memo ? `<span class="muted" style="display:block">${esc(s.memo)}</span>` : ''}</div>${careStatus(s.visit, s.date, s.start)}</div>`).join('') : '<span class="muted small">予定なし</span>'}</div>`;
+    }
+    $('#st-cal').innerHTML = wh;
+    return;
+  }
   let html = WEEK.map((w, i) => `<div class="cal-h${i === 6 ? ' sat' : i === 0 ? ' sun' : ''}">${w}</div>`).join('');
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const hn = holidayName(d), dow = new Date(at(d, '00:00')).getDay();
@@ -393,7 +417,20 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#st-list-box').hidden = S.shiftView !== 'list'; $('#st-month-box').hidden = S.shiftView !== 'month';
     if (S.shiftView === 'month') loadMonthShifts();
   }));
-  const stMove = n => { const [y, m] = S.calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1); S.calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; loadMonthShifts(); };
+  const stMove = n => {
+    if (S.calView === 'week') { S.calWeek = n === 0 ? addDays(today(), -new Date().getDay()) : addDays(S.calWeek, 7 * n); S.calMonth = addDays(S.calWeek, 3).slice(0, 7); }
+    else if (n === 0) S.calMonth = today().slice(0, 7);
+    else { const [y, m] = S.calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1); S.calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
+    loadMonthShifts();
+  };
+  $('#st-cal-this').addEventListener('click', () => stMove(0));
+  $$('#st-cal-view button').forEach(b => b.addEventListener('click', () => {
+    if (S.calView === b.dataset.v) return;
+    S.calView = b.dataset.v;
+    if (S.calView === 'week') { const base = today().startsWith(S.calMonth) ? today() : S.calMonth + '-01'; S.calWeek = addDays(base, -new Date(at(base, '00:00')).getDay()); }
+    else S.calMonth = addDays(S.calWeek, 3).slice(0, 7);
+    loadMonthShifts();
+  }));
   $('#st-cal').addEventListener('click', e => { const c = e.target.closest('[data-detail]'); if (c) toast(c.dataset.detail); });
   $('#st-cal-prev').addEventListener('click', () => stMove(-1)); $('#st-cal-next').addEventListener('click', () => stMove(1));
   $('#preview-staff').addEventListener('change', async e => {
