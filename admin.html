@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
-<link rel="stylesheet" href="common.css?v=202611261532">
+<link rel="stylesheet" href="common.css?v=202611261533">
 </head>
 <body>
 <div class="wrap">
@@ -201,8 +201,8 @@
 <div id="toast" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611261532"></script>
-<script src="common.js?v=202611261532"></script>
+<script src="config.js?v=202611261533"></script>
+<script src="common.js?v=202611261533"></script>
 <script>
 'use strict';
 const A = { uid: null, me: null, staff: [], profiles: [], services: [], visits: [], settings: { night_rate: 25, ot_rate: 25, ot_hours: 8, accompany_pct: 100 },
@@ -494,7 +494,7 @@ function renderCal(shifts) {
     const hn = holidayName(d), dow = new Date(at(d, '00:00')).getDay();
     const ss = list.filter(s => s.date === d).sort((a, b) => a.start.localeCompare(b.start));
     const cls = ['cal-d', week || d.startsWith(A.calMonth) ? '' : 'out', d === t ? 'today' : '', hn || dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''].join(' ');
-    html += `<div class="${cls}"><div class="cal-n"><span class="num">${week ? fmtDate(d).replace(/\(.\)/, '') : Number(d.slice(8))}</span>${hn ? `<span class="cal-hol">${esc(hn)}</span>` : ''}</div>${ss.map(s => {
+    html += `<div class="${cls}"><div class="cal-n"><span class="num">${week ? fmtDate(d) : Number(d.slice(8))}</span>${hn ? `<span class="cal-hol">${esc(hn)}</span>` : ''}</div>${ss.map(s => {
       const color = s.staffId ? staffColor(s.staffId) : 'var(--warn)';
       const who = s.staffId ? esc(shortName(s.staffId)) : '未定';
       const label = mode === 'visit'
